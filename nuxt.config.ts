@@ -5,17 +5,14 @@ export default defineNuxtConfig({
   devServer: {
     port: 4500
   },
+  nitro: {
+    // 让 ORM 与数据库驱动走 external，避免被打包时内联导致动态 require 失败
+    externals: {
+      external: ['drizzle-orm', 'pg']
+    }
+  },
   modules: [
     'vuetify-nuxt-module'
-  ],
-  vuetify: {
-    vuetifyOptions: {
-      icons: {
-        defaultSet: 'mdi'
-      },
-      theme: {
-        defaultTheme: 'light'
-      }
-    }
-  }
+  ]
+  // Vuetify 的全局配置见根目录 vuetify.config.ts
 })

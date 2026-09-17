@@ -20,6 +20,9 @@ logs
 .workbuddy
 .claude
 
+# Local runtime data (database files, app config)
+/data
+
 # Local env files
 .env
 .env.*
