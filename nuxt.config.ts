@@ -4,5 +4,18 @@ export default defineNuxtConfig({
   devtools: { enabled: true },
   devServer: {
     port: 4500
+  },
+  modules: [
+    'vuetify-nuxt-module'
+  ],
+  vuetify: {
+    vuetifyOptions: {
+      icons: {
+        defaultSet: 'mdi'
+      },
+      theme: {
+        defaultTheme: 'light'
+      }
+    }
   }
 })

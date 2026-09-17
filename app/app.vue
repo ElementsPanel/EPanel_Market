@@ -1,6 +1,14 @@
 <template>
-  <div>
+  <v-app>
     <NuxtRouteAnnouncer />
-    <NuxtWelcome />
-  </div>
+    <AppHeader />
+
+    <v-main>
+      <v-container>
+        <div class="text-h4">
+          sample
+        </div>
+      </v-container>
+    </v-main>
+  </v-app>
 </template>
