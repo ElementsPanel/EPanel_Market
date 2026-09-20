@@ -7,6 +7,10 @@ import type { VuetifyOptions } from 'vuetify'
  */
 export default {
   defaults: {
+    VAppBar: {
+      color: 'app-header',
+      flat: true
+    },
     VDialog: {
       scrim: 'rgba(0, 0, 0, 0.48)',
       scrollable: true
@@ -29,6 +33,18 @@ export default {
     defaultSet: 'mdi'
   },
   theme: {
-    defaultTheme: 'light'
+    defaultTheme: 'light',
+    themes: {
+      light: {
+        colors: {
+          'app-header': '#EEEEEE'
+        }
+      },
+      dark: {
+        colors: {
+          'app-header': '#1E1E24'
+        }
+      }
+    }
   }
 } satisfies VuetifyOptions

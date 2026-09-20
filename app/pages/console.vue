@@ -187,7 +187,7 @@ watch(tab, (key) => load(key))
 
     <v-alert v-if="errorMessage" type="error" class="mb-4" :text="errorMessage" />
 
-    <v-tabs v-model="tab" color="primary">
+    <v-tabs v-model="tab" color="primary" show-arrows>
       <v-tab value="review">
         审核队列
       </v-tab>
@@ -201,8 +201,8 @@ watch(tab, (key) => load(key))
 
     <v-progress-linear v-if="loading" indeterminate class="mt-2" />
 
-    <v-window v-model="tab" class="mt-4">
-      <v-window-item value="review">
+    <v-tabs-window v-model="tab" class="mt-4">
+      <v-tabs-window-item value="review">
         <v-card v-if="!reviewItems.length && !loading">
           <v-card-text class="text-center text-medium-emphasis py-8">
             审核队列是空的
@@ -256,9 +256,9 @@ watch(tab, (key) => load(key))
             </tr>
           </tbody>
         </v-table>
-      </v-window-item>
+      </v-tabs-window-item>
 
-      <v-window-item value="plugins">
+      <v-tabs-window-item value="plugins">
         <v-table v-if="pluginItems.length">
           <thead>
             <tr>
@@ -333,9 +333,9 @@ watch(tab, (key) => load(key))
             还没有插件
           </v-card-text>
         </v-card>
-      </v-window-item>
+      </v-tabs-window-item>
 
-      <v-window-item value="users">
+      <v-tabs-window-item value="users">
         <v-table v-if="userItems.length">
           <thead>
             <tr>
@@ -383,8 +383,8 @@ watch(tab, (key) => load(key))
             没有用户
           </v-card-text>
         </v-card>
-      </v-window-item>
-    </v-window>
+      </v-tabs-window-item>
+    </v-tabs-window>
 
     <v-dialog v-model="rejectShown" max-width="460">
       <v-card :title="'驳回插件版本'">
@@ -424,3 +424,24 @@ watch(tab, (key) => load(key))
     </v-dialog>
   </v-container>
 </template>
+
+<style scoped>
+/* 选中指示条沿用 ElementsPanel 的形式：原生 slider 保持透明以保留位移动画，
+   可见部分由 ::after 画成居中、两端收窄的短条 */
+:deep(.v-btn.v-tab) .v-tab__slider {
+  height: 4px;
+  background: transparent;
+}
+
+:deep(.v-btn.v-tab) .v-tab__slider::after {
+  position: absolute;
+  top: 0;
+  left: 50%;
+  width: 40%;
+  height: 4px;
+  border-radius: 4px 4px 0 0;
+  background-color: currentColor;
+  content: '';
+  transform: translateX(-50%);
+}
+</style>

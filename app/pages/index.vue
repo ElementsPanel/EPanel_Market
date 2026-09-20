@@ -53,7 +53,7 @@ function formatDate(timestamp?: number) {
       插件市场
     </div>
     <div class="text-body-2 text-medium-emphasis mb-6">
-      共 {{ result?.total ?? 0 }} 个插件，全部经过审核后上架
+      共 {{ result?.total ?? 0 }} 个插件
     </div>
 
     <v-row class="mb-2" dense>
