@@ -19,15 +19,16 @@ export default {
       rounded: 'xl',
       elevation: 0
     },
-    // variant 使用 solo：输入框/下拉框不带底部横线，配合 flat + rounded 呈胶囊状
-    VAutocomplete: { flat: true, rounded: 'xl', variant: 'solo' },
+    // variant 使用 filled：输入框/下拉框自带浅色背景且没有阴影，
+    // filled 默认会带的那条底部横线由 app/assets/css/main.css 去掉
+    VAutocomplete: { rounded: 'xl', variant: 'filled' },
     VBtn: { flat: true, rounded: 'xl' },
-    VCombobox: { flat: true, rounded: 'xl', variant: 'solo' },
-    VField: { flat: true, rounded: 'xl', variant: 'solo' },
-    VFileInput: { flat: true, rounded: 'xl', variant: 'solo' },
-    VSelect: { flat: true, rounded: 'xl', variant: 'solo' },
-    VTextarea: { flat: true, rounded: 'xl', variant: 'solo' },
-    VTextField: { flat: true, rounded: 'xl', variant: 'solo' }
+    VCombobox: { rounded: 'xl', variant: 'filled' },
+    VField: { rounded: 'xl', variant: 'filled' },
+    VFileInput: { rounded: 'xl', variant: 'filled' },
+    VSelect: { rounded: 'xl', variant: 'filled' },
+    VTextarea: { rounded: 'xl', variant: 'filled' },
+    VTextField: { rounded: 'xl', variant: 'filled' }
   },
   icons: {
     defaultSet: 'mdi'

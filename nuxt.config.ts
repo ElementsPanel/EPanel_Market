@@ -13,6 +13,7 @@ export default defineNuxtConfig({
   },
   modules: [
     'vuetify-nuxt-module'
-  ]
+  ],
+  css: ['~/assets/css/main.css']
   // Vuetify 的全局配置见根目录 vuetify.config.ts
 })

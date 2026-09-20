@@ -1,0 +1,8 @@
+/* 全站输入框样式：Vuetify 的 filled 变体自带背景且没有阴影，
+   但它会画一条底部横线（::before 常态、::after 聚焦时），这里直接把两个伪元素去掉。 */
+.v-field--variant-filled .v-field__outline::before,
+.v-field--variant-filled .v-field__outline::after,
+.v-field--variant-underlined .v-field__outline::before,
+.v-field--variant-underlined .v-field__outline::after {
+  content: none;
+}
