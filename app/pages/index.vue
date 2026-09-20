@@ -94,7 +94,9 @@ function formatDate(timestamp?: number) {
     <template v-else-if="items.length">
       <v-row>
         <v-col v-for="plugin in items" :key="plugin.id" cols="12" sm="6" md="4">
-          <v-card class="h-100" hover @click="navigateTo(`/plugins/${plugin.id}`)">
+          <!-- pa-2 给卡片 8px 内边距；转 flex 列容器后 v-card-text 会吃掉剩余高度，
+               把版本号和日期所在的操作行顶到每一张卡片的底部对齐 -->
+          <v-card class="h-100 pa-2 d-flex flex-column" hover @click="navigateTo(`/plugins/${plugin.id}`)">
             <v-card-item>
               <template #prepend>
                 <v-avatar color="primary" variant="tonal">
