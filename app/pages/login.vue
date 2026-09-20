@@ -6,12 +6,19 @@ const password = ref('')
 const loading = ref(false)
 const errorMessage = ref('')
 
+// 从插件市场授权页过来时带 next，登录完要回到授权页而不是首页
+const route = useRoute()
+const nextPath = computed(() => {
+  const next = route.query.next
+  return typeof next === 'string' && next.startsWith('/') ? next : '/'
+})
+
 async function submit() {
   errorMessage.value = ''
   loading.value = true
   try {
     await useAuth().login({ email: email.value, password: password.value })
-    await navigateTo('/')
+    await navigateTo(nextPath.value)
   } catch (error) {
     errorMessage.value = (error as Error).message
   } finally {

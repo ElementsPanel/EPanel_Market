@@ -47,6 +47,30 @@ export async function createUser(input: {
   return row
 }
 
+/** 控制台用户管理。管理员不能把自己降级，否则控制台会把自己锁在门外。 */
+export async function listUsers(): Promise<UserRow[]> {
+  const { db, tables } = await getDb()
+  return await db.select().from(tables.users)
+}
+
+export async function setUserAdmin(id: string, isAdmin: boolean): Promise<UserRow> {
+  const user = await findUserById(id)
+  if (!user) throw appError(404, 'NOT_FOUND', '用户不存在')
+
+  const { db, tables } = await getDb()
+  await db.update(tables.users).set({ isAdmin }).where(eq(tables.users.id, id))
+
+  return { ...user, isAdmin }
+}
+
+export async function deleteUser(id: string): Promise<void> {
+  const { db, tables } = await getDb()
+  const rows = await db.select().from(tables.users).where(eq(tables.users.id, id)).limit(1)
+  if (!rows[0]) throw appError(404, 'NOT_FOUND', '用户不存在')
+
+  await db.delete(tables.users).where(eq(tables.users.id, id))
+}
+
 export function toAuthUser(row: UserRow): AuthUser {
   return {
     id: row.id,

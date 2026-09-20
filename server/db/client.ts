@@ -5,6 +5,7 @@ import { drizzle as drizzleSqlite } from 'drizzle-orm/node-sqlite'
 import type { AppConfig, DbDriver } from '../../shared/types/setup'
 import { readConfig } from '../utils/config'
 import { resolveDataFile } from '../utils/paths'
+import { ddlFor } from './ddl'
 import { tablesFor, type AppTables } from './schema'
 
 /**
@@ -28,11 +29,28 @@ export interface AppContext {
 }
 
 let cachedContext: AppContext | null = null
+let schemaReady: Promise<void> | null = null
+
+/**
+ * 建表语句是幂等的（CREATE TABLE IF NOT EXISTS），所以每次启动都跑一遍：
+ * 没有迁移工具，这是已初始化的库拿到新表的唯一途径。同一个进程只跑一次。
+ */
+function ensureSchema(context: AppContext): Promise<void> {
+  if (!schemaReady) {
+    schemaReady = context.execDdl(ddlFor(context.dialect)).catch((error) => {
+      schemaReady = null
+      throw error
+    })
+  }
+  return schemaReady
+}
 
 export async function getDb(): Promise<AppContext> {
-  if (cachedContext) return cachedContext
-  // readConfig 在未初始化时抛出 NOT_INITIALIZED
-  cachedContext = createContext(readConfig())
+  if (!cachedContext) {
+    // readConfig 在未初始化时抛出 NOT_INITIALIZED
+    cachedContext = createContext(readConfig())
+  }
+  await ensureSchema(cachedContext)
   return cachedContext
 }
 
@@ -86,4 +104,5 @@ export function createContext(config: AppConfig): AppContext {
 
 export function resetDb(): void {
   cachedContext = null
+  schemaReady = null
 }
