@@ -5,5 +5,5 @@ import { requireApiUser } from '../../utils/api-token'
 
 export default defineEventHandler(async (event) => {
   const user = await requireApiUser(event)
-  return { user: toAuthUser(user) }
+  return { user: await toAuthUser(user) }
 })

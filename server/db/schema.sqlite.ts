@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto'
-import { index, integer, sqliteTable, text, uniqueIndex } from 'drizzle-orm/sqlite-core'
+import { blob, index, integer, sqliteTable, text, uniqueIndex } from 'drizzle-orm/sqlite-core'
 
 // ⚠ 必须与 server/db/schema.pg.ts 保持同构（列名、语义、TS 类型一致），
 // 否则 client.ts 里的统一类型断言会掩盖字段不一致的问题。
@@ -10,6 +10,19 @@ export const users = sqliteTable('users', {
   passwordHash: text('password_hash').notNull(),
   isAdmin: integer('is_admin', { mode: 'boolean' }).notNull().default(false),
   createdAt: integer('created_at').notNull(),
+})
+
+/**
+ * 头像单独存放：二进制不跟着用户行走，也避免给已存在的 users 表加列。
+ * buffer 模式只接受 Buffer/Uint8Array，写入前别转字符串（会被当 hex 解析）。
+ */
+export const userAvatars = sqliteTable('user_avatars', {
+  userId: text('user_id').primaryKey().references(() => users.id, { onDelete: 'cascade' }),
+  contentType: text('content_type').notNull(),
+  data: blob('data', { mode: 'buffer' }).notNull(),
+  /** 内容的 sha256，前端用它做缓存参数，接口用它做 ETag */
+  version: text('version').notNull(),
+  updatedAt: integer('updated_at').notNull(),
 })
 
 export const sessions = sqliteTable('sessions', {

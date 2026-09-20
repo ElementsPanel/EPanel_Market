@@ -48,7 +48,7 @@ export async function initializeApp(payload: SetupPayload): Promise<InitializeRe
     const token = await createSession(user.id)
     markInitialized()
 
-    return { user: toAuthUser(user), token }
+    return { user: await toAuthUser(user), token }
   } catch (error) {
     resetDb()
     removeConfigFile()

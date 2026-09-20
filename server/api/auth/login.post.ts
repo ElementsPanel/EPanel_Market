@@ -18,5 +18,5 @@ export default defineEventHandler(async (event) => {
 
   setSessionCookie(event, await createSession(user.id))
 
-  return { user: toAuthUser(user) }
+  return { user: await toAuthUser(user) }
 })

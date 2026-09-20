@@ -18,5 +18,5 @@ export default defineEventHandler(async (event) => {
 
   await createOAuthCode(user.id, state)
 
-  return { ok: true, user: toAuthUser(user) }
+  return { ok: true, user: await toAuthUser(user) }
 })

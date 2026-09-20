@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto'
-import { bigint, boolean, index, integer, pgTable, text, uniqueIndex } from 'drizzle-orm/pg-core'
+import { bigint, boolean, bytea, index, integer, pgTable, text, uniqueIndex } from 'drizzle-orm/pg-core'
 
 // ⚠ 必须与 server/db/schema.sqlite.ts 保持同构（列名、语义、TS 类型一致）。
 // 时间统一为 epoch 毫秒：pg 用 bigint({mode:'number'}) 映射到 JS number。
@@ -10,6 +10,16 @@ export const users = pgTable('users', {
   passwordHash: text('password_hash').notNull(),
   isAdmin: boolean('is_admin').notNull().default(false),
   createdAt: bigint('created_at', { mode: 'number' }).notNull(),
+})
+
+/** 头像单独存放：二进制不跟着用户行走，也避免给已存在的 users 表加列。 */
+export const userAvatars = pgTable('user_avatars', {
+  userId: text('user_id').primaryKey().references(() => users.id, { onDelete: 'cascade' }),
+  contentType: text('content_type').notNull(),
+  data: bytea('data').notNull(),
+  /** 内容的 sha256，前端用它做缓存参数，接口用它做 ETag */
+  version: text('version').notNull(),
+  updatedAt: bigint('updated_at', { mode: 'number' }).notNull(),
 })
 
 export const sessions = pgTable('sessions', {

@@ -5,6 +5,7 @@ import { getDb } from '../db/client'
 import type { AppTables } from '../db/schema'
 import { appError } from '../utils/errors'
 import { hashPassword } from '../utils/password'
+import { findAvatarVersion } from './avatars'
 
 export type UserRow = InferSelectModel<AppTables['users']>
 
@@ -63,6 +64,19 @@ export async function setUserAdmin(id: string, isAdmin: boolean): Promise<UserRo
   return { ...user, isAdmin }
 }
 
+/** 改自己的资料。字段由这里白名单限定，passwordHash 必须是已经哈希过的结果。 */
+export async function updateUserProfile(
+  id: string,
+  patch: { displayName?: string, email?: string, passwordHash?: string },
+): Promise<UserRow> {
+  const { db, tables } = await getDb()
+  const rows = await db.update(tables.users).set(patch).where(eq(tables.users.id, id)).returning()
+
+  const row = rows[0]
+  if (!row) throw appError(404, 'NOT_FOUND', '用户不存在')
+  return row
+}
+
 export async function deleteUser(id: string): Promise<void> {
   const { db, tables } = await getDb()
   const rows = await db.select().from(tables.users).where(eq(tables.users.id, id)).limit(1)
@@ -71,12 +85,14 @@ export async function deleteUser(id: string): Promise<void> {
   await db.delete(tables.users).where(eq(tables.users.id, id))
 }
 
-export function toAuthUser(row: UserRow): AuthUser {
+/** 脱敏出口：passwordHash 不列进去，头像只带版本号（二进制另有接口按 id 取）。 */
+export async function toAuthUser(row: UserRow): Promise<AuthUser> {
   return {
     id: row.id,
     email: row.email,
     displayName: row.displayName,
     isAdmin: row.isAdmin,
     createdAt: row.createdAt,
+    avatarVersion: await findAvatarVersion(row.id),
   }
 }

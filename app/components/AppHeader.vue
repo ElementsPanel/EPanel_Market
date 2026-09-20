@@ -1,5 +1,5 @@
 <script setup lang="ts">
-const { user, logout } = useAuth()
+const { user, avatarUrl, logout } = useAuth()
 </script>
 
 <template>
@@ -16,7 +16,9 @@ const { user, logout } = useAuth()
       <template v-if="user">
         <v-menu location="bottom end">
           <template #activator="{ props }">
-            <v-btn v-bind="props" icon="mdi-account-circle" variant="text" />
+            <v-btn v-bind="props" variant="text">
+              <UserAvatar :src="avatarUrl" :name="user.displayName" :size="28" />
+            </v-btn>
           </template>
           <v-list min-width="220">
             <v-list-item :title="user.displayName" :subtitle="user.email" />
@@ -27,6 +29,7 @@ const { user, logout } = useAuth()
               prepend-icon="mdi-view-dashboard-outline"
               to="/console"
             />
+            <v-list-item title="编辑资料" prepend-icon="mdi-account-edit" to="/account" />
             <v-list-item title="退出登录" prepend-icon="mdi-logout" @click="logout()" />
           </v-list>
         </v-menu>

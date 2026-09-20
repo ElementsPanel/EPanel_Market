@@ -1,7 +1,7 @@
 import { createHash, randomBytes } from 'node:crypto'
 import type { H3Event } from 'h3'
 import { deleteCookie, getCookie, getRequestURL, setCookie } from 'h3'
-import { eq } from 'drizzle-orm'
+import { and, eq, ne } from 'drizzle-orm'
 import { getDb } from '../db/client'
 import { readConfig } from './config'
 import type { UserRow } from '../services/users'
@@ -60,6 +60,19 @@ export async function destroySession(event: H3Event): Promise<void> {
   const { db, tables } = await getDb()
   await db.delete(tables.sessions).where(eq(tables.sessions.tokenHash, hashToken(token)))
   clearSessionCookie(event)
+}
+
+/** 改密码后踢掉其他设备上的会话：只删当前会话等于没有生效的措施。 */
+export async function destroyOtherSessions(event: H3Event, userId: string): Promise<void> {
+  const token = readSessionToken(event)
+  if (!token) return
+
+  const { db, tables } = await getDb()
+  const keep = hashToken(token)
+  await db.delete(tables.sessions).where(and(
+    eq(tables.sessions.userId, userId),
+    ne(tables.sessions.tokenHash, keep),
+  ))
 }
 
 /** 读取当前请求对应的用户，过期会话会被顺带清理 */

@@ -9,6 +9,13 @@ CREATE TABLE IF NOT EXISTS users (
   is_admin      INTEGER NOT NULL DEFAULT 0,
   created_at    INTEGER NOT NULL
 );
+CREATE TABLE IF NOT EXISTS user_avatars (
+  user_id      TEXT    PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+  content_type TEXT    NOT NULL,
+  data         BLOB    NOT NULL,
+  version      TEXT    NOT NULL,
+  updated_at   INTEGER NOT NULL
+);
 CREATE TABLE IF NOT EXISTS sessions (
   id           TEXT    PRIMARY KEY,
   user_id      TEXT    NOT NULL REFERENCES users(id) ON DELETE CASCADE,
@@ -76,6 +83,13 @@ CREATE TABLE IF NOT EXISTS users (
   password_hash TEXT    NOT NULL,
   is_admin      BOOLEAN NOT NULL DEFAULT FALSE,
   created_at    BIGINT  NOT NULL
+);
+CREATE TABLE IF NOT EXISTS user_avatars (
+  user_id      TEXT    PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+  content_type TEXT    NOT NULL,
+  data         BYTEA   NOT NULL,
+  version      TEXT    NOT NULL,
+  updated_at   BIGINT  NOT NULL
 );
 CREATE TABLE IF NOT EXISTS sessions (
   id           TEXT    PRIMARY KEY,
