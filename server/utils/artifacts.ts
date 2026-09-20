@@ -1,5 +1,5 @@
-import { existsSync, mkdirSync, rmSync, writeFileSync } from 'node:fs'
-import { dirname, isAbsolute, join, normalize, sep } from 'node:path'
+import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs'
+import { dirname, isAbsolute, join, normalize, relative, sep } from 'node:path'
 import { getDataDir } from './paths'
 
 /**
@@ -86,4 +86,37 @@ export function writeArtifactFile(relativePath: string, relativeFile: string, da
 export function removeArtifactDir(relativePath: string): void {
   if (!relativePath) return
   rmSync(artifactAbsolutePath(relativePath), { recursive: true, force: true })
+}
+
+/** 下载时逐文件取用：路径仍要过 safeRelativePath，产物目录之外一律拒绝。 */
+export function readArtifactFile(relativePath: string, relativeFile: string): Buffer {
+  const root = artifactAbsolutePath(relativePath)
+  const target = join(root, safeRelativePath(relativeFile))
+  if (target !== root && !target.startsWith(root + sep)) {
+    throw new Error('产物路径逃逸')
+  }
+  return readFileSync(target)
+}
+
+export function listArtifactFiles(relativePath: string): Array<{ path: string; size: number }> {
+  const root = artifactAbsolutePath(relativePath)
+  if (!existsSync(root)) return []
+
+  const files: Array<{ path: string; size: number }> = []
+  const walk = (directory: string) => {
+    for (const item of readdirSync(directory, { withFileTypes: true })) {
+      const target = join(directory, item.name)
+      if (item.isDirectory()) {
+        walk(target)
+        continue
+      }
+      files.push({
+        path: relative(root, target).split(sep).join('/'),
+        size: statSync(target).size,
+      })
+    }
+  }
+  walk(root)
+
+  return files.sort((a, b) => a.path.localeCompare(b.path))
 }

@@ -324,6 +324,29 @@ export async function createPluginVersion(input: {
   return { id, artifactPath }
 }
 
+/**
+ * 下载时定位版本：不传 version 就取最新的已通过版本，传了就必须是已通过的。
+ * 待审核与被驳回的版本不对外提供。
+ */
+export async function resolveDownloadVersion(
+  pluginId: string,
+  version?: string
+): Promise<{ plugin: PluginRow; version: PluginVersionRow }> {
+  const { db, tables } = await getDb()
+  const rows = await db.select().from(tables.plugins).where(eq(tables.plugins.id, pluginId)).limit(1)
+  const plugin = rows[0]
+  if (!plugin) throw appError(404, 'NOT_FOUND', '插件不存在')
+
+  const approved = (await loadVersions([pluginId], 'approved')).get(pluginId) ?? []
+  const candidates = version ? approved.filter((row) => row.version === version) : approved
+  const target = newestVersion(candidates)
+  if (!target) {
+    throw appError(404, 'NOT_FOUND', version ? `版本 ${version} 不可下载` : '该插件没有已通过的版本')
+  }
+
+  return { plugin, version: target }
+}
+
 /** 上传写盘失败时的回退：版本记录与磁盘产物一起消失。 */
 export async function deletePluginVersion(versionId: string, artifactPath: string): Promise<void> {
   const { db, tables } = await getDb()
