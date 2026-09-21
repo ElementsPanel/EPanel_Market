@@ -56,7 +56,7 @@ function formatDate(timestamp?: number) {
       共 {{ result?.total ?? 0 }} 个插件
     </div>
 
-    <v-row class="mb-2" dense>
+    <v-row class="mb-2" density="compact">
       <v-col cols="12" md="6">
         <v-text-field
           v-model="keyword"

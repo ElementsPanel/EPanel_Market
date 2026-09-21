@@ -93,7 +93,7 @@ async function submit() {
             </template>
 
             <template v-else>
-              <v-row dense>
+              <v-row density="compact">
                 <v-col cols="12" sm="8">
                   <v-text-field v-model="postgres.host" label="主机" />
                 </v-col>
