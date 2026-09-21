@@ -25,6 +25,7 @@ const { data, status, error, refresh } = await useFetch<PluginListResult>('/api/
 const result = computed(() => data.value)
 const items = computed(() => result.value?.items ?? [])
 const categories = computed(() => result.value?.categories ?? [])
+const hasFilters = computed(() => Boolean(appliedKeyword.value || appliedCategory.value))
 const totalPages = computed(() =>
   result.value ? Math.max(1, Math.ceil(result.value.total / result.value.pageSize)) : 1
 )
@@ -139,14 +140,17 @@ function formatDate(timestamp?: number) {
     </template>
 
     <v-card v-else class="text-center py-10">
-      <v-icon icon="mdi-puzzle-outline" size="48" class="text-medium-emphasis" />
+      <v-icon :icon="hasFilters ? 'mdi-magnify-close' : 'mdi-puzzle-outline'" size="48" class="text-medium-emphasis" />
       <div class="text-h6 mt-4">
-        还没有上架的插件
+        {{ hasFilters ? '未找到匹配的插件' : '还没有上架的插件' }}
       </div>
       <div class="text-body-2 text-medium-emphasis mt-1">
-        插件通过审核后会显示在这里
+        {{ hasFilters ? '试试更换关键词或分类' : '插件通过审核后会显示在这里' }}
       </div>
-      <v-btn variant="text" class="mt-4" @click="refresh">
+      <v-btn v-if="hasFilters" variant="text" class="mt-4" @click="resetFilters">
+        清除筛选
+      </v-btn>
+      <v-btn v-else variant="text" class="mt-4" @click="refresh">
         刷新
       </v-btn>
     </v-card>
