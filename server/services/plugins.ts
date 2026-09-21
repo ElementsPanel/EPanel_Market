@@ -6,6 +6,7 @@ import { appError } from '../utils/errors'
 import { artifactRelativePath, removeArtifactDir } from '../utils/artifacts'
 import type {
   PluginDetail,
+  PublishedPluginDetail,
   PluginListResult,
   PluginSummary,
   PluginUploadManifest,
@@ -158,7 +159,10 @@ export async function listPublishedPlugins(options: {
   }
 }
 
-export async function getPluginDetail(id: string): Promise<PluginDetail> {
+export async function getPluginDetail(
+  id: string,
+  version?: string
+): Promise<PublishedPluginDetail> {
   const { db, tables } = await getDb()
   const rows = await db.select().from(tables.plugins).where(eq(tables.plugins.id, id)).limit(1)
   const plugin = rows[0]
@@ -170,11 +174,16 @@ export async function getPluginDetail(id: string): Promise<PluginDetail> {
   if (!approved.length) throw appError(404, 'NOT_FOUND', '插件尚未有已通过的版本')
 
   const users = await loadAuthors([plugin.authorId])
-  const latest = newestVersion(approved)
+  const latest = newestVersion(approved)!
+  const selected = version ? approved.find((item) => item.version === version) : latest
+  if (!selected) throw appError(404, 'NOT_FOUND', '该版本不存在或尚未通过审核')
   return {
     ...toSummary(plugin, users, latest),
     description: plugin.description,
-    versions: approved.map(toVersionSummary).sort((a, b) => b.submittedAt - a.submittedAt),
+    selectedVersion: toVersionSummary(selected),
+    versions: approved.map(toVersionSummary).sort(
+      (a, b) => b.submittedAt - a.submittedAt || b.version.localeCompare(a.version)
+    ),
   }
 }
 
@@ -335,7 +344,9 @@ export async function resolveDownloadVersion(
   const { db, tables } = await getDb()
   const rows = await db.select().from(tables.plugins).where(eq(tables.plugins.id, pluginId)).limit(1)
   const plugin = rows[0]
-  if (!plugin) throw appError(404, 'NOT_FOUND', '插件不存在')
+  if (!plugin || plugin.visibility !== 'listed') {
+    throw appError(404, 'NOT_FOUND', '插件不存在或已下架')
+  }
 
   const approved = (await loadVersions([pluginId], 'approved')).get(pluginId) ?? []
   const candidates = version ? approved.filter((row) => row.version === version) : approved

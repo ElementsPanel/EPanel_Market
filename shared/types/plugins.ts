@@ -36,8 +36,13 @@ export interface PluginSummary {
 
 export interface PluginDetail extends PluginSummary {
   description: string
-  /** 版本历史，新在前。仅详情页会带上全部状态。 */
+  /** 版本历史，新在前。公开详情仅含已通过版本，作者视图包含全部状态。 */
   versions: PluginVersionSummary[]
+}
+
+/** 公开详情的选中版本始终已通过审核，默认选择最新版本。 */
+export interface PublishedPluginDetail extends PluginDetail {
+  selectedVersion: PluginVersionSummary
 }
 
 export interface PluginListResult {
