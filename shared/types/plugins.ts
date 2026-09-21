@@ -4,6 +4,15 @@ export type PluginVisibility = 'listed' | 'hidden'
 /** 一个版本的审核状态，`pending` 即处于审核队列。 */
 export type PluginVersionStatus = 'pending' | 'approved' | 'rejected'
 
+/**
+ * 插件的端：产物包里首段路径就是它（`panel/plugin.json`、`daemon/plugin.json`）。
+ * 两端都在就是双端插件。
+ */
+export type PluginSide = 'panel' | 'daemon'
+
+/** 固定顺序，前端展示与后端推导都用它，避免顺序随文件系统变化。 */
+export const PLUGIN_SIDES = ['panel', 'daemon'] as const
+
 export interface PluginVersionSummary {
   id: string
   version: string
@@ -14,6 +23,8 @@ export interface PluginVersionSummary {
   submittedAt: number
   reviewedAt?: number
   reviewNote?: string
+  /** 该版本的产物里实际存在的端。 */
+  sides: PluginSide[]
 }
 
 /** 列表卡片用的插件摘要。版本取自最新的已通过版本。 */
@@ -30,6 +41,8 @@ export interface PluginSummary {
   }
   /** 最新已通过版本，尚无通过版本时为 undefined。 */
   latestVersion?: PluginVersionSummary
+  /** 最新已通过版本的端，供卡片直接展示，不必往下钻。 */
+  sides: PluginSide[]
   createdAt: number
   updatedAt: number
 }

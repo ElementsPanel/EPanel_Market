@@ -120,6 +120,7 @@ function formatDate(timestamp?: number) {
               <v-chip v-if="plugin.latestVersion" size="small" variant="tonal">
                 v{{ plugin.latestVersion.version }}
               </v-chip>
+              <PluginSideBadges :sides="plugin.sides" />
               <v-spacer />
               <span class="text-caption text-medium-emphasis">
                 {{ formatDate(plugin.updatedAt) }}

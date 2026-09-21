@@ -1,5 +1,6 @@
 const assert = require('node:assert/strict')
 const fs = require('node:fs')
+const os = require('node:os')
 const path = require('node:path')
 const Module = require('node:module')
 const { test } = require('node:test')
@@ -41,6 +42,7 @@ function fixture() {
       version: '1.0.0',
       submittedAt: 1,
       status: 'approved',
+      artifactPath: 'data/artifacts/one/v1',
     },
     {
       id: 'v2',
@@ -48,6 +50,7 @@ function fixture() {
       version: '2.0.0',
       submittedAt: 2,
       status: 'approved',
+      artifactPath: 'data/artifacts/one/v2',
     },
     {
       id: 'v3',
@@ -55,6 +58,7 @@ function fixture() {
       version: '3.0.0',
       submittedAt: 3,
       status: 'pending',
+      artifactPath: 'data/artifacts/one/v3',
     },
     {
       id: 'v4',
@@ -62,6 +66,7 @@ function fixture() {
       version: '4.0.0',
       submittedAt: 4,
       status: 'rejected',
+      artifactPath: 'data/artifacts/one/v4',
     },
   ]
   const rows = {
@@ -113,7 +118,8 @@ function fixture() {
       appError: (statusCode, code, message) =>
         Object.assign(new Error(message), { statusCode, code }),
     },
-    '../utils/artifacts': {},
+    // 端是从产物目录推导的；这里不碰文件系统。
+    '../utils/artifacts': { listArtifactSides: () => ['panel'] },
   })
   return { service, plugin, versions }
 }
@@ -129,6 +135,9 @@ test('public details select the newest approved release and expose approved hist
   )
   assert.equal(result.description, 'Full description')
   assert.equal(result.author.displayName, 'Author')
+  // 卡片用插件级字段，详情页用选中版本的字段，两者都来自产物目录。
+  assert.deepEqual(result.sides, ['panel'])
+  assert.deepEqual(result.selectedVersion.sides, ['panel'])
 })
 
 test('a requested historical release matches the version returned for download', async () => {
@@ -179,4 +188,110 @@ test('equal publication times give details and download the same latest release'
   const download = await service.resolveDownloadVersion('one')
   assert.equal(detail.versions[0].id, detail.latestVersion.id)
   assert.equal(detail.selectedVersion.id, download.version.id)
+})
+
+test('a download side is inferred only when the version has exactly one', () => {
+  const { service } = fixture()
+  assert.equal(service.resolveDownloadSide(['panel']), 'panel')
+  assert.equal(service.resolveDownloadSide(['daemon']), 'daemon')
+  assert.equal(service.resolveDownloadSide(['panel', 'daemon'], 'daemon'), 'daemon')
+  // 双端插件不替用户挑一半。
+  assert.throws(() => service.resolveDownloadSide(['panel', 'daemon']), { statusCode: 400 })
+  assert.throws(() => service.resolveDownloadSide(['panel'], 'daemon'), { statusCode: 404 })
+  assert.throws(() => service.resolveDownloadSide([], 'panel'), { statusCode: 404 })
+})
+
+function artifactFixture() {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'market-artifacts-'))
+  const dataDir = path.join(root, 'data')
+  const write = (relative, content) => {
+    const target = path.join(dataDir, 'artifacts', relative)
+    fs.mkdirSync(path.dirname(target), { recursive: true })
+    fs.writeFileSync(target, content)
+  }
+  const artifacts = load('server/utils/artifacts.ts', {
+    './paths': { getDataDir: () => dataDir },
+    // 真实的 shared/types 是 .ts，这里的 CJS 加载器解析不了，只取用到的常量。
+    '../../shared/types/plugins': { PLUGIN_SIDES: ['panel', 'daemon'] },
+  })
+  return { root, write, artifacts }
+}
+
+test('sides come from the first path segment, and a side download drops that prefix', () => {
+  const { root, write, artifacts } = artifactFixture()
+  try {
+    assert.deepEqual(artifacts.listArtifactSides('data/artifacts/p/missing'), [])
+
+    write('p/only-panel/panel/plugin.json', '{}')
+    assert.deepEqual(artifacts.listArtifactSides('data/artifacts/p/only-panel'), ['panel'])
+
+    write('p/both/plugin.json', '{}')
+    assert.deepEqual(artifacts.listArtifactSides('data/artifacts/p/both'), [])
+
+    write('p/both/panel/plugin.json', '{}')
+    write('p/both/panel/frontend/空 格.js', 'y')
+    write('p/both/daemon/backend/index.cjs', 'x')
+    assert.deepEqual(artifacts.listArtifactSides('data/artifacts/p/both'), ['panel', 'daemon'])
+
+    const panel = artifacts.listSideEntries('data/artifacts/p/both', 'panel')
+    assert.deepEqual(panel.map((entry) => entry.name), ['frontend/空 格.js', 'plugin.json'])
+    assert.equal(panel[1].data.toString(), '{}')
+    assert.deepEqual(
+      artifacts.listSideEntries('data/artifacts/p/both', 'daemon').map((entry) => entry.name),
+      ['backend/index.cjs']
+    )
+  } finally {
+    fs.rmSync(root, { recursive: true, force: true })
+  }
+})
+
+/** 够用来读回自己写出的 zip：反查 EOCD，再顺着中央目录找每个条目的数据。 */
+function readZip(buffer) {
+  const eocd = buffer.length - 22
+  assert.equal(buffer.readUInt32LE(eocd), 0x06054b50)
+  const total = buffer.readUInt16LE(eocd + 10)
+  const directorySize = buffer.readUInt32LE(eocd + 12)
+  const directoryOffset = buffer.readUInt32LE(eocd + 16)
+  assert.equal(directoryOffset + directorySize, eocd)
+
+  const entries = []
+  let cursor = directoryOffset
+  for (let index = 0; index < total; index += 1) {
+    assert.equal(buffer.readUInt32LE(cursor), 0x02014b50)
+    const flags = buffer.readUInt16LE(cursor + 8)
+    const method = buffer.readUInt16LE(cursor + 10)
+    const crc = buffer.readUInt32LE(cursor + 16)
+    const size = buffer.readUInt32LE(cursor + 24)
+    const nameLength = buffer.readUInt16LE(cursor + 28)
+    const localOffset = buffer.readUInt32LE(cursor + 42)
+    const name = buffer.toString('utf8', cursor + 46, cursor + 46 + nameLength)
+
+    assert.equal(buffer.readUInt32LE(localOffset), 0x04034b50)
+    const dataStart = localOffset + 30 + buffer.readUInt16LE(localOffset + 26)
+    entries.push({ name, method, flags, crc, data: buffer.subarray(dataStart, dataStart + size) })
+    cursor += 46 + nameLength
+  }
+  return entries
+}
+
+test('the zip writer stores entries a reader can take back byte for byte', () => {
+  const { createZip, crc32 } = load('server/utils/zip.ts', {})
+  const written = [
+    { name: 'plugin.json', data: Buffer.from('{"name":"one"}') },
+    { name: 'backend/空 格.cjs', data: Buffer.from('module.exports = 1') },
+    { name: 'empty.txt', data: Buffer.alloc(0) },
+  ]
+  const read = readZip(createZip(written, new Date('2026-01-02T03:04:05Z')))
+
+  assert.deepEqual(
+    read.map((entry) => entry.name),
+    written.map((entry) => entry.name)
+  )
+  for (const [index, entry] of read.entries()) {
+    // 全部走 STORE：不压缩，也就不需要数据描述符，长度与 CRC 在头里就写死了。
+    assert.equal(entry.method, 0)
+    assert.equal(entry.crc, crc32(entry.data))
+    assert.deepEqual(Buffer.from(entry.data), written[index].data)
+    assert.equal(entry.flags, /[^\x00-\x7f]/.test(entry.name) ? 0x0800 : 0)
+  }
 })

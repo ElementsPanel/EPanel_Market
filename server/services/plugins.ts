@@ -3,11 +3,12 @@ import { and, desc, eq, inArray, like, or, type InferSelectModel } from 'drizzle
 import type { AppTables } from '../db/schema'
 import { getDb } from '../db/client'
 import { appError } from '../utils/errors'
-import { artifactRelativePath, removeArtifactDir } from '../utils/artifacts'
+import { artifactRelativePath, listArtifactSides, removeArtifactDir } from '../utils/artifacts'
 import type {
   PluginDetail,
   PublishedPluginDetail,
   PluginListResult,
+  PluginSide,
   PluginSummary,
   PluginUploadManifest,
   PluginVersionStatus,
@@ -35,6 +36,7 @@ function toVersionSummary(row: PluginVersionRow): PluginVersionSummary {
     submittedAt: row.submittedAt,
     reviewedAt: row.reviewedAt ?? undefined,
     reviewNote: row.reviewNote ?? undefined,
+    sides: listArtifactSides(row.artifactPath),
   }
 }
 
@@ -86,6 +88,7 @@ function toSummary(
   users: Map<string, UserRow>,
   latest?: PluginVersionRow
 ): PluginSummary {
+  const latestVersion = latest ? toVersionSummary(latest) : undefined
   return {
     id: plugin.id,
     name: plugin.name,
@@ -94,7 +97,8 @@ function toSummary(
     category: plugin.category,
     visibility: plugin.visibility as PluginVisibility,
     author: authorOf(users, plugin.authorId),
-    latestVersion: latest ? toVersionSummary(latest) : undefined,
+    latestVersion,
+    sides: latestVersion?.sides ?? [],
     createdAt: plugin.createdAt,
     updatedAt: plugin.updatedAt,
   }
@@ -356,6 +360,23 @@ export async function resolveDownloadVersion(
   }
 
   return { plugin, version: target }
+}
+
+/**
+ * 下载哪个端。不指定时只有单端插件能自己决定；双端插件必须让用户选，
+ * 与其默认挑一半，不如把问题交回去。
+ */
+export function resolveDownloadSide(sides: PluginSide[], requested?: string): PluginSide {
+  const wanted = String(requested ?? '').trim()
+  if (wanted) {
+    if (!sides.includes(wanted as PluginSide)) {
+      throw appError(404, 'NOT_FOUND', `该版本不包含 ${wanted} 端`)
+    }
+    return wanted as PluginSide
+  }
+
+  if (sides.length === 1) return sides[0]!
+  throw appError(400, 'VALIDATION_ERROR', '请指定要下载的端：panel 或 daemon')
 }
 
 /** 上传写盘失败时的回退：版本记录与磁盘产物一起消失。 */

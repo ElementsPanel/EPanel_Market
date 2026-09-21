@@ -1,5 +1,6 @@
 import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs'
 import { dirname, isAbsolute, join, normalize, relative, sep } from 'node:path'
+import { PLUGIN_SIDES, type PluginSide } from '../../shared/types/plugins'
 import { getDataDir } from './paths'
 
 /**
@@ -105,6 +106,8 @@ export function listArtifactFiles(relativePath: string): Array<{ path: string; s
   const files: Array<{ path: string; size: number }> = []
   const walk = (directory: string) => {
     for (const item of readdirSync(directory, { withFileTypes: true })) {
+      // 软链指向产物目录之外，只按它本身是文件还是目录来处理会读错东西。
+      if (item.isSymbolicLink()) continue
       const target = join(directory, item.name)
       if (item.isDirectory()) {
         walk(target)
@@ -119,4 +122,30 @@ export function listArtifactFiles(relativePath: string): Array<{ path: string; s
   walk(root)
 
   return files.sort((a, b) => a.path.localeCompare(b.path))
+}
+
+/**
+ * 该版本产物里实际存在的端。首段路径就是端，所以从文件清单推导，不需要额外的
+ * 数据库列——这个项目没有迁移机制，加列会让已有的库静默缺列。
+ */
+export function listArtifactSides(relativePath: string): PluginSide[] {
+  const segments = new Set(listArtifactFiles(relativePath).map((file) => file.path.split('/')[0]))
+  return PLUGIN_SIDES.filter((side) => segments.has(side))
+}
+
+/**
+ * 某一端的文件，名字去掉首段的端前缀——解压后可以直接放进该端的插件目录。
+ * 名字仍要过 `safeRelativePath`，产物目录之外的东西一律取不到。
+ */
+export function listSideEntries(
+  relativePath: string,
+  side: PluginSide
+): Array<{ name: string; data: Buffer }> {
+  const prefix = `${side}/`
+  return listArtifactFiles(relativePath)
+    .filter((file) => file.path.startsWith(prefix))
+    .map((file) => ({
+      name: safeRelativePath(file.path.slice(prefix.length)).split(sep).join('/'),
+      data: readArtifactFile(relativePath, file.path),
+    }))
 }
