@@ -11,7 +11,7 @@ const { data, status, error, refresh } = await useFetch<PublishedPluginDetail>(
   () => `/api/plugins/${encodeURIComponent(id.value)}`
 )
 
-const tab = ref<'overview' | 'versions' | 'updates'>('overview')
+const tab = ref<'readme' | 'versions' | 'updates'>('readme')
 
 const sides = computed<PluginSide[]>(() => data.value?.sides ?? [])
 const sideLabel = computed(() => pluginSideLabel(sides.value))
@@ -111,7 +111,7 @@ function formatSize(bytes: number) {
       </header>
 
       <v-tabs v-model="tab" color="primary" class="detail-tabs">
-        <v-tab value="overview">概览</v-tab>
+        <v-tab value="readme">自述</v-tab>
         <v-tab value="versions">版本</v-tab>
         <v-tab value="updates">更新</v-tab>
       </v-tabs>
@@ -121,9 +121,11 @@ function formatSize(bytes: number) {
           <!-- 页签内容用 v-tabs-window，与 console.vue 的写法保持一致；侧边栏三项都要
                用，所以留在窗口外面。 -->
           <v-tabs-window v-model="tab">
-            <v-tabs-window-item value="overview">
-              <p class="plugin-detail-text">
-                {{ data.description || '暂无详细说明' }}
+            <v-tabs-window-item value="readme">
+              <!-- 自述来自包里的 README.md，服务端已经渲染并净化过 -->
+              <div v-if="data.readmeHtml" class="markdown-body" v-html="data.readmeHtml" />
+              <p v-else class="plugin-detail-text">
+                {{ data.description || '暂无自述' }}
               </p>
             </v-tabs-window-item>
 
@@ -376,5 +378,111 @@ function formatSize(bytes: number) {
 
 .plugin-detail-text {
   white-space: pre-wrap;
+}
+
+/* README 渲染出来的标签由 v-html 注入，不带 scoped 属性，所以要走 :deep() */
+.markdown-body {
+  font-size: 15px;
+  line-height: 1.7;
+}
+
+.markdown-body :deep(h1),
+.markdown-body :deep(h2),
+.markdown-body :deep(h3),
+.markdown-body :deep(h4),
+.markdown-body :deep(h5),
+.markdown-body :deep(h6) {
+  margin: 24px 0 12px;
+  font-weight: 700;
+  line-height: 1.3;
+}
+
+.markdown-body :deep(h1) {
+  font-size: 24px;
+}
+
+.markdown-body :deep(h2) {
+  font-size: 20px;
+}
+
+.markdown-body :deep(h3) {
+  font-size: 17px;
+}
+
+.markdown-body :deep(p) {
+  margin: 0 0 12px;
+}
+
+.markdown-body :deep(ul),
+.markdown-body :deep(ol) {
+  margin: 0 0 12px;
+  padding-left: 22px;
+}
+
+.markdown-body :deep(li) {
+  margin-bottom: 4px;
+}
+
+.markdown-body :deep(a) {
+  color: rgb(var(--v-theme-primary));
+}
+
+.markdown-body :deep(code) {
+  padding: 2px 5px;
+  border-radius: 4px;
+  font-size: 13px;
+  background: rgba(var(--v-theme-on-surface), 0.08);
+}
+
+.markdown-body :deep(pre) {
+  margin: 0 0 12px;
+  padding: 12px 14px;
+  border-radius: 8px;
+  background: rgba(var(--v-theme-on-surface), 0.06);
+  overflow-x: auto;
+}
+
+.markdown-body :deep(pre code) {
+  padding: 0;
+  background: none;
+}
+
+.markdown-body :deep(blockquote) {
+  margin: 0 0 12px;
+  padding-left: 12px;
+  opacity: 0.85;
+  border-left: 3px solid rgba(var(--v-theme-on-surface), 0.2);
+}
+
+.markdown-body :deep(img) {
+  max-width: 100%;
+  height: auto;
+}
+
+.markdown-body :deep(table) {
+  width: 100%;
+  margin-bottom: 12px;
+  border-collapse: collapse;
+}
+
+.markdown-body :deep(th),
+.markdown-body :deep(td) {
+  padding: 8px 10px;
+  text-align: left;
+  border-bottom: 1px solid rgba(var(--v-theme-on-surface), 0.12);
+}
+
+.markdown-body :deep(hr) {
+  margin: 20px 0;
+  border: 0;
+  border-top: 1px solid rgba(var(--v-theme-on-surface), 0.12);
+}
+
+.markdown-body :deep(> :first-child) {
+  margin-top: 0;
+}
+
+.markdown-body :deep(> :last-child) {
+  margin-bottom: 0;
 }
 </style>

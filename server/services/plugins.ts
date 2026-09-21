@@ -3,7 +3,8 @@ import { and, desc, eq, inArray, like, or, type InferSelectModel } from 'drizzle
 import type { AppTables } from '../db/schema'
 import { getDb } from '../db/client'
 import { appError } from '../utils/errors'
-import { artifactRelativePath, listArtifactSides, removeArtifactDir } from '../utils/artifacts'
+import { artifactRelativePath, listArtifactSides, readArtifactReadme, removeArtifactDir } from '../utils/artifacts'
+import { renderMarkdown } from '../utils/markdown'
 import type {
   PluginDetail,
   PublishedPluginDetail,
@@ -181,6 +182,9 @@ export async function getPluginDetail(
   const latest = newestVersion(approved)!
   const selected = version ? approved.find((item) => item.version === version) : latest
   if (!selected) throw appError(404, 'NOT_FOUND', '该版本不存在或尚未通过审核')
+  // 自述是包里的 README.md，跟着选中的版本走；渲染后的 HTML 一并给出，页面直接用，
+  // 免得把 markdown 渲染器搬进浏览器。
+  const readme = readArtifactReadme(selected.artifactPath)
   return {
     ...toSummary(plugin, users, latest),
     description: plugin.description,
@@ -188,6 +192,8 @@ export async function getPluginDetail(
     versions: approved.map(toVersionSummary).sort(
       (a, b) => b.submittedAt - a.submittedAt || b.version.localeCompare(a.version)
     ),
+    readme,
+    readmeHtml: renderMarkdown(readme),
   }
 }
 
@@ -240,6 +246,25 @@ export function validateUploadManifest(input: Partial<PluginUploadManifest>): Pl
     category: String(input.category ?? '').slice(0, 32),
     changelog: String(input.changelog ?? '').slice(0, 4000),
   }
+}
+
+/**
+ * 插件信息来自包里的 `plugin.json`：包本来就是自描述的，没必要再让发布方把同一份信息
+ * 单独提交一遍。取值顺序沿用发布脚本原来的写法，行为不变。
+ */
+export function manifestFromPluginJson(value: unknown): PluginUploadManifest {
+  const raw = (value ?? {}) as Record<string, unknown>
+  const id = String(raw.id ?? '').trim()
+  const description = typeof raw.description === 'string' ? raw.description : ''
+  return validateUploadManifest({
+    name: id,
+    displayName: String(raw.displayName ?? raw.name ?? id),
+    version: String(raw.version ?? ''),
+    summary: String(raw.summary ?? description),
+    description,
+    category: String(raw.category ?? ''),
+    changelog: String(raw.changelog ?? ''),
+  })
 }
 
 /** 找到作者名下的插件，没有就创建。同名插件属于不同的人时直接拒绝。 */

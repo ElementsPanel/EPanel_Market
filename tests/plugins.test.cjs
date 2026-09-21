@@ -27,7 +27,7 @@ function load(relative, overrides) {
   return mod.exports
 }
 
-function fixture() {
+function fixture({ readme = '' } = {}) {
   const plugin = {
     id: 'one',
     name: 'one',
@@ -118,8 +118,12 @@ function fixture() {
       appError: (statusCode, code, message) =>
         Object.assign(new Error(message), { statusCode, code }),
     },
-    // 端是从产物目录推导的；这里不碰文件系统。
-    '../utils/artifacts': { listArtifactSides: () => ['panel'] },
+    // 端与自述都是从产物目录推导的；这里不碰文件系统。
+    '../utils/artifacts': { listArtifactSides: () => ['panel'], readArtifactReadme: () => readme },
+    // 渲染 markdown 需要 marked/sanitize-html，这里只关心服务把原文递了出去。
+    '../utils/markdown': {
+      renderMarkdown: (markdown) => (markdown ? `<p>${markdown}</p>` : ''),
+    },
   })
   return { service, plugin, versions }
 }
@@ -295,3 +299,85 @@ test('the zip writer stores entries a reader can take back byte for byte', () =>
     assert.equal(entry.flags, /[^\x00-\x7f]/.test(entry.name) ? 0x0800 : 0)
   }
 })
+
+test('the detail carries the selected release README, raw and rendered', async () => {
+  const readme = '# Hello\n\nsome text'
+  const { service } = fixture({ readme })
+  const detail = await service.getPluginDetail('one')
+  assert.equal(detail.readme, readme)
+  assert.equal(detail.readmeHtml, `<p>${readme}</p>`)
+})
+
+test('a package without a README leaves both fields empty', async () => {
+  const { service } = fixture()
+  const detail = await service.getPluginDetail('one')
+  assert.equal(detail.readme, '')
+  assert.equal(detail.readmeHtml, '')
+})
+
+test('the upload manifest is taken from the package plugin.json', () => {
+  const { service } = fixture()
+  assert.deepEqual(
+    service.manifestFromPluginJson({
+      id: 'demo',
+      displayName: 'Demo',
+      version: '1.2.0',
+      description: 'long text',
+      category: 'tools',
+      changelog: 'notes',
+    }),
+    {
+      name: 'demo',
+      displayName: 'Demo',
+      version: '1.2.0',
+      // summary 缺失时退到 description，和发布脚本原来的取值顺序一致
+      summary: 'long text',
+      description: 'long text',
+      category: 'tools',
+      changelog: 'notes',
+    }
+  )
+})
+
+test('a plugin.json without the market fields falls back to what it has, and a bad id is refused', () => {
+  const { service } = fixture()
+  const manifest = service.manifestFromPluginJson({
+    id: 'demo',
+    name: 'Demo plugin',
+    version: '1.0.0',
+  })
+  assert.equal(manifest.name, 'demo')
+  assert.equal(manifest.displayName, 'Demo plugin')
+  assert.equal(manifest.summary, '')
+
+  assert.throws(() => service.manifestFromPluginJson({ id: 'Bad Id', version: '1.0.0' }), {
+    statusCode: 400,
+  })
+  assert.throws(() => service.manifestFromPluginJson({ id: 'demo' }), { statusCode: 400 })
+})
+
+// 依赖装好后这条会自动开始跑（package.json 里已经声明了 marked 与 sanitize-html）。
+const markdownDepsInstalled = (() => {
+  try {
+    const from = path.resolve(__dirname, '..')
+    require.resolve('marked', { paths: [from] })
+    require.resolve('sanitize-html', { paths: [from] })
+    return true
+  } catch {
+    return false
+  }
+})()
+
+test(
+  'a README is rendered to markdown and stripped of anything unsafe',
+  { skip: markdownDepsInstalled ? false : 'marked / sanitize-html 尚未安装' },
+  () => {
+    const { renderMarkdown } = load('server/utils/markdown.ts', {})
+    const html = renderMarkdown('# Title\n\n**bold** and <script>alert(1)</script>\n\n- one\n- two')
+    assert.match(html, /<h1>Title<\/h1>/)
+    assert.match(html, /<strong>bold<\/strong>/)
+    assert.match(html, /<li>one<\/li>/)
+    assert.equal(html.includes('<script'), false, 'script tags are dropped')
+    assert.equal(renderMarkdown('   '), '', 'a blank README renders to nothing')
+  }
+)

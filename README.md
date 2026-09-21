@@ -80,12 +80,26 @@ Check out the [deployment documentation](https://nuxt.com/docs/getting-started/d
 版本历史、最新版本 `latestVersion` 与选中版本 `selectedVersion`。省略 `version`
 时选择最新版本；插件已下架、版本不存在或未通过审核时返回 404。
 
-网站详情页 `/plugins/:id` 恒定展示最新已通过版本，分为概览、版本、更新三个页签：
-概览是插件说明，版本按版本列出更新时间/大小/文件数并**各自带一个下载按钮**，更新按
-版本列出各自的更新内容。点击版本行不会再切换页面，网页也不读写 URL 的 `version`
-——那个参数留给接口用。ElementsPanel 的 `/market/plugins/:pluginId` 仍用它安装指定
-版本；安装时的 `/files` 与 `/file` 请求均携带该版本号。只允许下载已上架插件的已通过
-版本。
+网站详情页 `/plugins/:id` 恒定展示最新已通过版本，分为自述、版本、更新三个页签：
+自述是插件包里的 README.md（下节），版本按版本列出更新时间/大小/文件数并**各自带一个
+下载按钮**，更新按版本列出各自的更新内容。点击版本行不会再切换页面，网页也不读写 URL
+的 `version` —— 那个参数留给接口用。ElementsPanel 的 `/market/plugins/:pluginId` 仍用它
+安装指定版本；安装时的 `/files` 与 `/file` 请求均携带该版本号。只允许下载已上架插件的
+已通过版本。
+
+## 插件自述与插件信息
+
+**自述**取自包里 `<side>/README.md`（先 panel 端，再看 daemon 端，与 plugin.json 的取用
+顺序一致）。公开详情接口多返回两个字段：`readme` 是原文，`readmeHtml` 是渲染并净化后的
+HTML —— 渲染放在服务端，页面直接用，不必把 markdown 渲染器搬进浏览器。自述是可选的，
+包里没有就是空串。渲染用 `marked` + `sanitize-html`，标签白名单与面板的
+`markdownToHTML` 保持一致（`server/utils/markdown.ts`）。
+
+**插件信息**取自包里的 `<side>/plugin.json`，不再要求发布方额外提交一份 manifest：
+包本来就是自描述的（`id` 是发布用的 slug，`displayName`/`summary`/`category`/`changelog`
+是市场页面展示的字段）。取值顺序与原发布脚本一致：`name ← id`、
+`displayName ← displayName ?? name ?? id`、`summary ← summary ?? description`。缺少
+`panel/plugin.json` 与 `daemon/plugin.json` 的上传会被拒绝。
 
 ## 插件端与按端下载
 

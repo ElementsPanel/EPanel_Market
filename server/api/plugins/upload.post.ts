@@ -1,4 +1,5 @@
 import { readMultipartFormData } from 'h3'
+import { sep } from 'node:path'
 import { requireApiUser } from '../../utils/api-token'
 import { appError } from '../../utils/errors'
 import { ensureArtifactDir, safeRelativePath, writeArtifactFile } from '../../utils/artifacts'
@@ -6,33 +7,25 @@ import {
   assertVersionAvailable,
   createPluginVersion,
   deletePluginVersion,
+  manifestFromPluginJson,
   resolvePluginForUpload,
-  validateUploadManifest,
 } from '../../services/plugins'
-import type { PluginUploadManifest } from '../../../shared/types/plugins'
 
-// 面板编译完成后把整个插件包传上来。文件用 multipart 逐份提交，字段名是它在
-// 包内的相对路径；manifest 字段是插件信息。新版本一律进入审核队列。
+// 面板编译完成后把整个插件包传上来。文件用 multipart 逐份提交，字段名是它在包内的
+// 相对路径；插件信息取自包里的 plugin.json，包是自描述的，不用再单独交一份。
+// 新版本一律进入审核队列。
 
 const MAX_FILES = 200
 const MAX_TOTAL_BYTES = 20 * 1024 * 1024
+
+/** package.json 里的清单：panel 端描述整包，daemon 单端包用自己的。 */
+const MANIFEST_FILES = ['panel/plugin.json', 'daemon/plugin.json']
 
 export default defineEventHandler(async (event) => {
   const user = await requireApiUser(event)
 
   const parts = await readMultipartFormData(event)
   if (!parts?.length) throw appError(400, 'VALIDATION_ERROR', '上传内容为空')
-
-  const manifestPart = parts.find((part) => part.name === 'manifest')
-  if (!manifestPart) throw appError(400, 'VALIDATION_ERROR', '缺少插件信息')
-
-  let rawManifest: Partial<PluginUploadManifest>
-  try {
-    rawManifest = JSON.parse(manifestPart.data.toString('utf8')) as Partial<PluginUploadManifest>
-  } catch {
-    throw appError(400, 'VALIDATION_ERROR', '插件信息不是合法的 JSON')
-  }
-  const manifest = validateUploadManifest(rawManifest)
 
   const files = parts.filter((part) => part.name === 'file')
   if (!files.length) throw appError(400, 'VALIDATION_ERROR', '插件包里没有文件')
@@ -56,6 +49,21 @@ export default defineEventHandler(async (event) => {
   if (totalBytes > MAX_TOTAL_BYTES) {
     throw appError(413, 'PAYLOAD_TOO_LARGE', '插件包总大小不能超过 20MB')
   }
+
+  const manifestFile = MANIFEST_FILES.map((candidate) =>
+    entries.find((entry) => entry.relativeFile.split(sep).join('/') === candidate)
+  ).find((entry) => entry !== undefined)
+  if (!manifestFile) {
+    throw appError(400, 'VALIDATION_ERROR', `插件包里缺少 ${MANIFEST_FILES[0]}`)
+  }
+
+  let parsedManifest: unknown
+  try {
+    parsedManifest = JSON.parse(manifestFile.data.toString('utf8'))
+  } catch {
+    throw appError(400, 'VALIDATION_ERROR', 'plugin.json 不是合法的 JSON')
+  }
+  const manifest = manifestFromPluginJson(parsedManifest)
 
   const plugin = await resolvePluginForUpload(user.id, manifest)
   await assertVersionAvailable(plugin.id, manifest.version)

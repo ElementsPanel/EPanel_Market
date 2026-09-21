@@ -56,6 +56,10 @@ export interface PluginDetail extends PluginSummary {
 /** 公开详情的选中版本始终已通过审核，默认选择最新版本。 */
 export interface PublishedPluginDetail extends PluginDetail {
   selectedVersion: PluginVersionSummary
+  /** 选中版本包里 `<side>/README.md` 的原文；包里没有自述时是空串。 */
+  readme: string
+  /** 上者渲染并净化后的 HTML；空自述同样是空串。 */
+  readmeHtml: string
 }
 
 export interface PluginListResult {

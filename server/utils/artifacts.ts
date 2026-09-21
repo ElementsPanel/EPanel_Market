@@ -149,3 +149,24 @@ export function listSideEntries(
       data: readArtifactFile(relativePath, file.path),
     }))
 }
+
+/**
+ * 包里的自述。先看 panel 端再看 daemon 端，与 plugin.json 的取用顺序一致；两端都没有
+ * 就返回空串——README.md 是可选的，不因为它缺席而让详情页报错。
+ *
+ * 清单已按路径排序，`<side>/README.md` 会排在 `<side>/backend/...` 之前，取第一个命中
+ * 即可（大小写不敏感）。
+ */
+export function readArtifactReadme(relativePath: string): string {
+  const files = listArtifactFiles(relativePath)
+  for (const side of PLUGIN_SIDES) {
+    const prefix = `${side}/`
+    const found = files.find(
+      (file) =>
+        file.path.startsWith(prefix) &&
+        file.path.slice(prefix.length).split('/').pop()?.toLowerCase() === 'readme.md'
+    )
+    if (found) return readArtifactFile(relativePath, found.path).toString('utf8')
+  }
+  return ''
+}
