@@ -3,38 +3,45 @@ import type { PluginSide, PublishedPluginDetail } from '../../../shared/types/pl
 import { pluginSideLabel } from '../../utils/pluginSides'
 
 const route = useRoute()
-const router = useRouter()
 const id = computed(() => String(route.params.id ?? ''))
-const version = computed(() =>
-  typeof route.query.version === 'string' ? route.query.version : undefined
-)
+
+// 详情页恒定展示最新版，不再从 URL 读 version——版本列表只列出历史，切换版本要走
+// 接口参数（面板仍是那样用），网页这边不需要。
 const { data, status, error, refresh } = await useFetch<PublishedPluginDetail>(
-  () => `/api/plugins/${encodeURIComponent(id.value)}`,
-  { query: { version } }
+  () => `/api/plugins/${encodeURIComponent(id.value)}`
 )
 
-const tab = ref<'overview' | 'versions'>('overview')
+const tab = ref<'overview' | 'versions' | 'updates'>('overview')
 
-// 端跟着选中的版本走：产物是按版本存的，端属于版本。回退到插件级字段是为了兼容
-// 还没有逐版本 sides 的旧数据。
-const sides = computed<PluginSide[]>(
-  () => data.value?.selectedVersion.sides ?? data.value?.sides ?? []
-)
+const sides = computed<PluginSide[]>(() => data.value?.sides ?? [])
 const sideLabel = computed(() => pluginSideLabel(sides.value))
 
-function downloadUrl(side: PluginSide) {
-  const params = new URLSearchParams({ side })
-  if (data.value) params.set('version', data.value.selectedVersion.version)
+function downloadUrl(side: PluginSide, version: string) {
+  const params = new URLSearchParams({ side, version })
   return `/api/plugins/${encodeURIComponent(id.value)}/download?${params}`
 }
 
-// 单端直接下载；双端要先问用户拿哪一端。
-const downloadTargets = computed(() =>
-  sides.value.map((side) => ({
+/** 一个版本的下载入口：单端一个按钮，双端为此先下拉选端。 */
+function targetsFor(version: { version: string; sides?: PluginSide[] }) {
+  // 逐版本的端信息缺失（旧服务器或旧缓存的响应）时退回插件级的，再没有才不给按钮，
+  // 而不是让渲染在这一步崩掉。
+  const list = version.sides?.length ? version.sides : (data.value?.sides ?? [])
+  return list.map((side) => ({
     side,
     label: side === 'panel' ? '下载 Panel 端' : '下载 Daemon 端',
-    href: downloadUrl(side),
+    href: downloadUrl(side, version.version),
   }))
+}
+
+const downloadTargets = computed(() => {
+  const map = new Map<string, ReturnType<typeof targetsFor>>()
+  for (const version of data.value?.versions ?? []) map.set(version.id, targetsFor(version))
+  return map
+})
+
+// selectedVersion 在没有 version 参数时就是最新已通过版本。
+const headerTargets = computed(() =>
+  data.value ? targetsFor(data.value.selectedVersion) : []
 )
 
 const errorMessage = computed(() => {
@@ -43,15 +50,9 @@ const errorMessage = computed(() => {
 })
 
 useSeoMeta({
-  title: () =>
-    data.value ? `${data.value.displayName} · 插件市场` : '插件详情',
+  title: () => (data.value ? `${data.value.displayName} · 插件市场` : '插件详情'),
   description: () => data.value?.summary || '查看插件说明、版本历史与更新内容',
 })
-
-function selectVersion(value: string) {
-  if (!value) return
-  void router.replace({ query: { ...route.query, version: value } })
-}
 
 function formatDate(timestamp?: number) {
   if (!timestamp) return ''
@@ -105,47 +106,19 @@ function formatSize(bytes: number) {
         </div>
 
         <div class="detail-action">
-          <v-menu v-if="downloadTargets.length > 1" location="bottom end">
-            <template #activator="{ props: menuProps }">
-              <v-btn
-                color="primary"
-                prepend-icon="mdi-download"
-                append-icon="mdi-menu-down"
-                v-bind="menuProps"
-              >
-                下载
-              </v-btn>
-            </template>
-            <v-list min-width="200">
-              <v-list-item
-                v-for="target in downloadTargets"
-                :key="target.side"
-                :href="target.href"
-                :title="target.label"
-                prepend-icon="mdi-download"
-              />
-            </v-list>
-          </v-menu>
-          <v-btn
-            v-else
-            color="primary"
-            prepend-icon="mdi-download"
-            :href="downloadTargets[0]?.href"
-            :disabled="!downloadTargets.length"
-          >
-            下载
-          </v-btn>
+          <PluginDownloadButton :targets="headerTargets" prominent />
         </div>
       </header>
 
       <v-tabs v-model="tab" color="primary" class="detail-tabs">
         <v-tab value="overview">概览</v-tab>
         <v-tab value="versions">版本</v-tab>
+        <v-tab value="updates">更新</v-tab>
       </v-tabs>
 
       <v-row>
         <v-col cols="12" md="8">
-          <!-- 页签内容用 v-tabs-window，与 console.vue 的写法保持一致；侧边栏两项都要
+          <!-- 页签内容用 v-tabs-window，与 console.vue 的写法保持一致；侧边栏三项都要
                用，所以留在窗口外面。 -->
           <v-tabs-window v-model="tab">
             <v-tabs-window-item value="overview">
@@ -155,30 +128,34 @@ function formatSize(bytes: number) {
             </v-tabs-window-item>
 
             <v-tabs-window-item value="versions">
-              <h2 class="detail-section-title">版本历史</h2>
               <div class="version-list">
-                <button
-                  v-for="item in data.versions"
-                  :key="item.id"
-                  type="button"
-                  class="version-item"
-                  :class="{
-                    'version-item--active': item.version === data.selectedVersion.version,
-                  }"
-                  @click="selectVersion(item.version)"
-                >
-                  <span class="version-item-name">v{{ item.version }}</span>
-                  <span class="version-item-meta">
-                    {{ formatDate(item.submittedAt) }} ·
-                    {{ formatSize(item.sizeBytes) }} · {{ item.fileCount }} 个文件
-                  </span>
-                </button>
+                <div v-for="item in data.versions" :key="item.id" class="version-item">
+                  <div class="version-item-text">
+                    <span class="version-item-name">v{{ item.version }}</span>
+                    <span class="version-item-meta">
+                      {{ formatDate(item.submittedAt) }} ·
+                      {{ formatSize(item.sizeBytes) }} · {{ item.fileCount }} 个文件
+                    </span>
+                  </div>
+                  <PluginDownloadButton :targets="downloadTargets.get(item.id) ?? []" />
+                </div>
               </div>
+            </v-tabs-window-item>
 
-              <h2 class="detail-section-title">更新说明</h2>
-              <p class="plugin-detail-text">
-                {{ data.selectedVersion.changelog || '暂无更新说明' }}
-              </p>
+            <v-tabs-window-item value="updates">
+              <article
+                v-for="item in data.versions"
+                :key="item.id"
+                class="update-item"
+              >
+                <div class="update-head">
+                  <span class="update-version">v{{ item.version }}</span>
+                  <span class="update-date">{{ formatDate(item.submittedAt) }}</span>
+                </div>
+                <p class="plugin-detail-text update-body">
+                  {{ item.changelog || '暂无更新说明' }}
+                </p>
+              </article>
             </v-tabs-window-item>
           </v-tabs-window>
         </v-col>
@@ -200,12 +177,8 @@ function formatSize(bytes: number) {
                 <dt>开发者</dt>
                 <dd>{{ data.author.displayName }}</dd>
               </div>
-              <div v-if="data.latestVersion" class="detail-info-row">
-                <dt>最新版本</dt>
-                <dd>v{{ data.latestVersion.version }}</dd>
-              </div>
               <div class="detail-info-row">
-                <dt>当前版本</dt>
+                <dt>最新版本</dt>
                 <dd>v{{ data.selectedVersion.version }}</dd>
               </div>
               <div class="detail-info-row">
@@ -305,57 +278,6 @@ function formatSize(bytes: number) {
   transform: translateX(-50%);
 }
 
-.detail-section-title {
-  margin: 0 0 12px;
-  font-size: 15px;
-  font-weight: 700;
-}
-
-.detail-section-title:not(:first-child) {
-  margin-top: 28px;
-}
-
-.version-list {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-}
-
-.version-item {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  width: 100%;
-  padding: 12px 14px;
-  border: 0;
-  border-radius: 8px;
-  background: none;
-  text-align: left;
-  cursor: pointer;
-}
-
-.version-item:hover {
-  background: rgba(var(--v-theme-on-surface), 0.05);
-}
-
-.version-item--active {
-  background: rgba(var(--v-theme-primary), 0.1);
-}
-
-.version-item--active .version-item-name {
-  color: rgb(var(--v-theme-primary));
-}
-
-.version-item-name {
-  font-size: 15px;
-  font-weight: 600;
-}
-
-.version-item-meta {
-  font-size: 12px;
-  opacity: 0.7;
-}
-
 .detail-sidebar-section + .detail-sidebar-section {
   margin-top: 28px;
 }
@@ -386,6 +308,70 @@ function formatSize(bytes: number) {
   margin: 0;
   min-width: 0;
   overflow-wrap: anywhere;
+}
+
+.version-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+/* 每一行只做两件事：说清是哪个版本，给出这个版本的下载入口。 */
+.version-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 12px 14px;
+  border-radius: 8px;
+}
+
+.version-item:hover {
+  background: rgba(var(--v-theme-on-surface), 0.05);
+}
+
+.version-item-text {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+}
+
+.version-item-name {
+  font-size: 15px;
+  font-weight: 600;
+}
+
+.version-item-meta {
+  font-size: 12px;
+  opacity: 0.7;
+}
+
+.update-item + .update-item {
+  margin-top: 24px;
+  padding-top: 24px;
+  border-top: 1px solid rgba(var(--v-theme-on-surface), 0.12);
+}
+
+.update-head {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+  margin-bottom: 8px;
+}
+
+.update-version {
+  font-size: 15px;
+  font-weight: 600;
+}
+
+.update-date {
+  font-size: 12px;
+  opacity: 0.7;
+}
+
+.update-body {
+  margin: 0;
 }
 
 .plugin-detail-text {

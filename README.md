@@ -80,10 +80,12 @@ Check out the [deployment documentation](https://nuxt.com/docs/getting-started/d
 版本历史、最新版本 `latestVersion` 与选中版本 `selectedVersion`。省略 `version`
 时选择最新版本；插件已下架、版本不存在或未通过审核时返回 404。
 
-网站详情页 `/plugins/:id` 可选择版本查看更新说明与文件大小，并通过 URL 中的
-`version` 保留选择。ElementsPanel 的 `/market/plugins/:pluginId` 使用同一接口，
-在详情页安装所选版本；安装时的 `/files` 与 `/file` 请求均携带该版本号。
-只允许下载已上架插件的已通过版本。
+网站详情页 `/plugins/:id` 恒定展示最新已通过版本，分为概览、版本、更新三个页签：
+概览是插件说明，版本按版本列出更新时间/大小/文件数并**各自带一个下载按钮**，更新按
+版本列出各自的更新内容。点击版本行不会再切换页面，网页也不读写 URL 的 `version`
+——那个参数留给接口用。ElementsPanel 的 `/market/plugins/:pluginId` 仍用它安装指定
+版本；安装时的 `/files` 与 `/file` 请求均携带该版本号。只允许下载已上架插件的已通过
+版本。
 
 ## 插件端与按端下载
 
@@ -92,12 +94,13 @@ Check out the [deployment documentation](https://nuxt.com/docs/getting-started/d
 让已有的库静默缺列。
 
 `PluginSummary.sides` 取最新已通过版本的端，供列表卡片展示；`PluginVersionSummary.sides`
-是每个版本自己的端，详情页跟随当前选中的版本。两端齐了显示「双端插件」，否则是
-「Panel插件」或「Daemon插件」。卡片与详情页都据此显示标识。
+是每个版本自己的端，版本行据此决定下载按钮要不要问端。两端齐了显示「双端插件」，
+否则是「Panel插件」或「Daemon插件」。卡片与详情页都据此显示标识。
 
-详情页的「下载」按钮走 `GET /api/plugins/:id/download?version=&side=panel|daemon`：
+详情页的下载走 `GET /api/plugins/:id/download?version=&side=panel|daemon`（页头下最新
+版，版本行下各自那一版）：
 - 单端插件不用传 `side`，省略即取那唯一的一端；
-- 双端插件必须传，否则返回 400——页面在这种情况下会先弹出下拉让用户选；
+- 双端插件必须传，否则返回 400——页头和版本行在这种情况下都会先弹出下拉让用户选端；
 - 该版本不含请求的那一端时返回 404。
 
 返回的 zip 只含这一端的文件，并且**去掉了首段的端前缀**（`panel/plugin.json` →
