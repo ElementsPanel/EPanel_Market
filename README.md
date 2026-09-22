@@ -87,6 +87,18 @@ Check out the [deployment documentation](https://nuxt.com/docs/getting-started/d
 安装指定版本；安装时的 `/files` 与 `/file` 请求均携带该版本号。只允许下载已上架插件的
 已通过版本。
 
+## 插件包的两端与清单来源
+
+发布方的开发工作区 `external/<name>/` 是两个彼此独立的半边：`panel/` 与 `daemon/` 各自带一份
+`plugin.json`，各自描述自己那份插件。没有「工作区根目录的 plugin.json」这一步，编译也不会把
+一份清单拆成两半——它读的是 `<side>/plugin.json`，逐端产出。产物包里首段路径就是端
+（`panel/...`、`daemon/...`），下面各节写的 `<side>/` 指的就是它。
+
+市场把一个包**当成一个插件**上架，所以清单、自述与图标都按同一个顺序解析：先看 `panel/`，
+没有再看 `daemon/`（清单见 `server/api/plugins/upload.post.ts` 的 `MANIFEST_FILES`，自述见
+`readArtifactReadme`，图标见 `findArtifactIcon`）。两端各写各的清单，市场只取描述整包的那一份：
+有 panel 端时以它为准，daemon-only 工作区则用 daemon 端那份。
+
 ## 插件自述与插件信息
 
 **自述**取自包里 `<side>/README.md`（先 panel 端，再看 daemon 端，与 plugin.json 的取用
