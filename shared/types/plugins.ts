@@ -43,6 +43,11 @@ export interface PluginSummary {
   latestVersion?: PluginVersionSummary
   /** 最新已通过版本的端，供卡片直接展示，不必往下钻。 */
   sides: PluginSide[]
+  /**
+   * 最新已通过版本的包里有没有 `icon.png`。与 `sides` 一样从产物目录推导，没有对应
+   * 数据库列；为 true 时 `GET /api/plugins/:id/icon` 才有图。
+   */
+  hasIcon: boolean
   createdAt: number
   updatedAt: number
 }

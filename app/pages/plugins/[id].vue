@@ -16,6 +16,21 @@ const tab = ref<'readme' | 'versions' | 'updates'>('readme')
 const sides = computed<PluginSide[]>(() => data.value?.sides ?? [])
 const sideLabel = computed(() => pluginSideLabel(sides.value))
 
+// 包里的 icon.png 就是插件的门面；没有或取不到时退回默认拼图图标。换插件要重来一次，
+// 否则上一张图的失败状态会把它永远按在兜底样式上。
+const iconFailed = ref(false)
+watch(() => data.value?.id, () => {
+  iconFailed.value = false
+})
+
+function markIconFailed() {
+  iconFailed.value = true
+}
+
+function iconUrl(pluginId: string) {
+  return `/api/plugins/${encodeURIComponent(pluginId)}/icon`
+}
+
 function downloadUrl(side: PluginSide, version: string) {
   const params = new URLSearchParams({ side, version })
   return `/api/plugins/${encodeURIComponent(id.value)}/download?${params}`
@@ -86,7 +101,14 @@ function formatSize(bytes: number) {
       <header class="detail-header">
         <div class="detail-heading">
           <v-avatar color="primary" variant="tonal" size="64" rounded="lg">
-            <v-icon icon="mdi-puzzle-outline" size="34" />
+            <v-img
+              v-if="data.hasIcon && !iconFailed"
+              :src="iconUrl(data.id)"
+              alt=""
+              cover
+              @error="markIconFailed"
+            />
+            <v-icon v-else icon="mdi-puzzle-outline" size="34" />
           </v-avatar>
           <div class="detail-heading-text">
             <h1 class="detail-title">

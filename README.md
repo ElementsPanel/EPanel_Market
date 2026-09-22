@@ -101,8 +101,18 @@ HTML —— 渲染放在服务端，页面直接用，不必把 markdown 渲染�
 `displayName ← displayName ?? name ?? id`、`summary ← summary ?? description`。缺少
 `panel/plugin.json` 与 `daemon/plugin.json` 的上传会被拒绝。
 
-## 插件端与按端下载
+## 插件图标
 
+**图标**取自包里 `<side>/icon.png`（先 panel 端，再看 daemon 端，与 plugin.json、README.md
+的取用顺序一致）。发布方在工作区根目录放一份 `icon.png`，编译时会放进包内优先读取的那一端。
+公开接口 `GET /api/plugins/:id/icon?version=` 返回图片字节：只对上架、已通过审核的版本提供，
+按文件头确认确实是 PNG 后才以 `image/png` + `nosniff` 返回，否则 404。
+
+`PluginSummary.hasIcon` 表示最新已通过版本的包里有没有图标，列表卡片据此决定加载图片还是
+回退到默认拼图图标；缺图标不是错误，页面只是显示默认图标。图标与端、自述一样从产物目录
+推导，不存数据库字段。
+
+## 插件端与按端下载
 产物包用首段路径区分端（`panel/plugin.json`、`daemon/plugin.json`），两端都有就是
 双端插件。端是从产物目录推导出来的，没有单独存字段——这个项目没有迁移机制，加列会
 让已有的库静默缺列。

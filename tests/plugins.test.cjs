@@ -27,7 +27,7 @@ function load(relative, overrides) {
   return mod.exports
 }
 
-function fixture({ readme = '' } = {}) {
+function fixture({ readme = '', hasIcon = false } = {}) {
   const plugin = {
     id: 'one',
     name: 'one',
@@ -118,8 +118,12 @@ function fixture({ readme = '' } = {}) {
       appError: (statusCode, code, message) =>
         Object.assign(new Error(message), { statusCode, code }),
     },
-    // 端与自述都是从产物目录推导的；这里不碰文件系统。
-    '../utils/artifacts': { listArtifactSides: () => ['panel'], readArtifactReadme: () => readme },
+    // 端、自述与图标都是从产物目录推导的；这里不碰文件系统。
+    '../utils/artifacts': {
+      listArtifactSides: () => ['panel'],
+      readArtifactReadme: () => readme,
+      hasArtifactIcon: () => hasIcon,
+    },
     // 渲染 markdown 需要 marked/sanitize-html，这里只关心服务把原文递了出去。
     '../utils/markdown': {
       renderMarkdown: (markdown) => (markdown ? `<p>${markdown}</p>` : ''),
@@ -142,6 +146,7 @@ test('public details select the newest approved release and expose approved hist
   // 卡片用插件级字段，详情页用选中版本的字段，两者都来自产物目录。
   assert.deepEqual(result.sides, ['panel'])
   assert.deepEqual(result.selectedVersion.sides, ['panel'])
+  assert.equal(result.hasIcon, false)
 })
 
 test('a requested historical release matches the version returned for download', async () => {
@@ -247,6 +252,43 @@ test('sides come from the first path segment, and a side download drops that pre
   } finally {
     fs.rmSync(root, { recursive: true, force: true })
   }
+})
+
+test('the package icon is found panel-side first, and only a real PNG is served', () => {
+  const { root, write, artifacts } = artifactFixture()
+  const png = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0x00, 0x01])
+  try {
+    assert.equal(artifacts.hasArtifactIcon('data/artifacts/p/none'), false)
+    assert.equal(artifacts.readArtifactIcon('data/artifacts/p/none'), null)
+
+    // daemon-only 工作区：图标落在 daemon 端也能找到
+    write('p/daemon-only/daemon/plugin.json', '{}')
+    write('p/daemon-only/daemon/icon.png', png)
+    assert.equal(artifacts.findArtifactIcon('data/artifacts/p/daemon-only'), 'daemon/icon.png')
+    assert.equal(artifacts.hasArtifactIcon('data/artifacts/p/daemon-only'), true)
+
+    // 双端：panel 优先，与 plugin.json / README.md 的取用顺序一致
+    write('p/both/panel/icon.png', png)
+    write('p/both/daemon/icon.png', png)
+    assert.equal(artifacts.findArtifactIcon('data/artifacts/p/both'), 'panel/icon.png')
+
+    const icon = artifacts.readArtifactIcon('data/artifacts/p/both')
+    assert.equal(icon.contentType, 'image/png')
+    assert.deepEqual(icon.data, png)
+
+    // 名字叫 icon.png 但内容不是 PNG：文件在，但不能当图片发出去
+    write('p/bogus/panel/icon.png', 'not a png')
+    assert.equal(artifacts.hasArtifactIcon('data/artifacts/p/bogus'), true)
+    assert.equal(artifacts.readArtifactIcon('data/artifacts/p/bogus'), null)
+  } finally {
+    fs.rmSync(root, { recursive: true, force: true })
+  }
+})
+
+test('a package icon is reported on the plugin summary', async () => {
+  const withIcon = fixture({ hasIcon: true })
+  assert.equal((await withIcon.service.getPluginDetail('one')).hasIcon, true)
+  assert.equal((await fixture().service.getPluginDetail('one')).hasIcon, false)
 })
 
 /** 够用来读回自己写出的 zip：反查 EOCD，再顺着中央目录找每个条目的数据。 */

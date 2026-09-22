@@ -3,7 +3,7 @@ import { and, desc, eq, inArray, like, or, type InferSelectModel } from 'drizzle
 import type { AppTables } from '../db/schema'
 import { getDb } from '../db/client'
 import { appError } from '../utils/errors'
-import { artifactRelativePath, listArtifactSides, readArtifactReadme, removeArtifactDir } from '../utils/artifacts'
+import { artifactRelativePath, hasArtifactIcon, listArtifactSides, readArtifactReadme, removeArtifactDir } from '../utils/artifacts'
 import { renderMarkdown } from '../utils/markdown'
 import type {
   PluginDetail,
@@ -100,6 +100,7 @@ function toSummary(
     author: authorOf(users, plugin.authorId),
     latestVersion,
     sides: latestVersion?.sides ?? [],
+    hasIcon: latest ? hasArtifactIcon(latest.artifactPath) : false,
     createdAt: plugin.createdAt,
     updatedAt: plugin.updatedAt,
   }

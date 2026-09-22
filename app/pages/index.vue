@@ -30,6 +30,22 @@ const totalPages = computed(() =>
   result.value ? Math.max(1, Math.ceil(result.value.total / result.value.pageSize)) : 1
 )
 
+// 图标加载失败（旧插件没带、或取不到）时退回到默认拼图图标，按插件 id 记住失败。
+const failedIcons = ref<Record<string, boolean>>({})
+
+// 列表刷新后重试一次：只有 hasIcon 为真的插件才会发请求，所以清空不会造成额外的失败请求。
+watch(items, () => {
+  failedIcons.value = {}
+})
+
+function markIconFailed(pluginId: string) {
+  failedIcons.value[pluginId] = true
+}
+
+function iconUrl(pluginId: string) {
+  return `/api/plugins/${encodeURIComponent(pluginId)}/icon`
+}
+
 function search() {
   page.value = 1
   appliedKeyword.value = keyword.value
@@ -101,7 +117,15 @@ function formatDate(timestamp?: number) {
             <v-card-item>
               <template #prepend>
                 <v-avatar color="primary" variant="tonal">
-                  <v-icon icon="mdi-puzzle-outline" />
+                  <!-- 包里的 icon.png；没有或取不到时仍是那块拼图 -->
+                  <v-img
+                    v-if="plugin.hasIcon && !failedIcons[plugin.id]"
+                    :src="iconUrl(plugin.id)"
+                    alt=""
+                    cover
+                    @error="markIconFailed(plugin.id)"
+                  />
+                  <v-icon v-else icon="mdi-puzzle-outline" />
                 </v-avatar>
               </template>
               <v-card-title class="text-body-1">

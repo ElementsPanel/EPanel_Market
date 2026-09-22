@@ -20,7 +20,15 @@ const ALLOWED_EXTENSIONS = new Set([
   '.scss',
   '.md',
   '.txt',
+  // 插件在工作区根目录放的图标，随包发布。
+  '.png',
 ])
+
+/** 图标是插件的门面：固定文件名，放在包里某一端的根目录（`<side>/icon.png`）。 */
+const ICON_FILE = 'icon.png'
+const ICON_MIME = 'image/png'
+/** PNG 文件头。上传的内容是可信边界之外的数据，按文件头判定真实类型。 */
+const PNG_SIGNATURE = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a])
 
 export function getArtifactsRoot(): string {
   return join(getDataDir(), 'artifacts')
@@ -169,4 +177,45 @@ export function readArtifactReadme(relativePath: string): string {
     if (found) return readArtifactFile(relativePath, found.path).toString('utf8')
   }
   return ''
+}
+
+/**
+ * 包里图标的完整路径。图标是插件级的（一个插件一个图标），所以先 panel 端再看 daemon 端，
+ * 与 plugin.json、README.md 的取用顺序一致；两端都没有就返回 null。
+ *
+ * 和端、自述一样从产物目录推导，不存数据库字段——这个项目没有迁移机制，加列会让已有的库
+ * 静默缺列。
+ */
+export function findArtifactIcon(relativePath: string): string | null {
+  const files = listArtifactFiles(relativePath)
+  for (const side of PLUGIN_SIDES) {
+    const found = files.find((file) => file.path === `${side}/${ICON_FILE}`)
+    if (found) return found.path
+  }
+  return null
+}
+
+/**
+ * 该版本包里有没有图标。列表卡片只需要知道有没有，不读字节——列表会为每个插件调用它。
+ * 内容是否真的是 PNG 由下载时（`readArtifactIcon`）判定。
+ */
+export function hasArtifactIcon(relativePath: string): boolean {
+  return findArtifactIcon(relativePath) !== null
+}
+
+/**
+ * 图标本身，附带它的 `Content-Type`。内容不是 PNG 时返回 null，让插件页退回到默认图标，
+ * 而不是把一个坏文件当图片发出去。类型以文件头为准，不采信任何客户端输入。
+ */
+export function readArtifactIcon(
+  relativePath: string
+): { data: Buffer; contentType: string } | null {
+  const path = findArtifactIcon(relativePath)
+  if (!path) return null
+
+  const data = readArtifactFile(relativePath, path)
+  if (data.length < PNG_SIGNATURE.length || !data.subarray(0, 8).equals(PNG_SIGNATURE)) {
+    return null
+  }
+  return { data, contentType: ICON_MIME }
 }
