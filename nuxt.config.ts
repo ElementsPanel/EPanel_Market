@@ -1,4 +1,9 @@
 // https://nuxt.com/docs/api/configuration/nuxt-config
+import { join } from 'node:path'
+import { fileURLToPath } from 'node:url'
+
+const sharedDir = fileURLToPath(new URL('./shared', import.meta.url))
+
 export default defineNuxtConfig({
   compatibilityDate: '2025-07-15',
   devtools: { enabled: true },
@@ -32,6 +37,34 @@ export default defineNuxtConfig({
   modules: [
     'vuetify-nuxt-module'
   ],
-  css: ['~/assets/css/main.css']
+  css: ['~/assets/css/main.css'],
+  hooks: {
+    // Nuxt 会把 shared/ 目录在 SSR 构建里标成 external，交给 nitro 去解析。但 rolldown
+    // 渲染这些绝对路径时会算错相对层级（产物 chunk 放在 dist/server/_nuxt/ 下，它却按
+    // dist/ 计算），nitro 打包时就找不到文件，报
+    // "Could not resolve '../../../../../shared/utils/avatar.ts'"。
+    // 这里去掉 shared 的 external 规则，让它和客户端构建一样直接内联进 SSR 产物。
+    // 代价是服务端会存在两份 shared/ 代码（nitro 侧与 SSR 侧各一份），本项目 shared/
+    // 里只有类型和常量，没有共享状态，不受影响。
+    'vite:extendConfig'(config, { isServer }) {
+      if (!isServer) return
+
+      // Nuxt 的那条 external 规则是 shared 目录的绝对路径前缀正则，用目录里的一个
+      // 假路径就能把它试出来
+      const sharedProbe = join(sharedDir, 'probe')
+      const environments = (config as unknown as { environments?: Record<string, { build?: unknown }> }).environments ?? {}
+      const builds: unknown[] = [config.build, ...Object.values(environments).map(environment => environment?.build)]
+
+      for (const build of builds) {
+        const options = (build as { rolldownOptions?: { external?: unknown[] } })?.rolldownOptions
+          ?? (build as { rollupOptions?: { external?: unknown[] } })?.rollupOptions
+        if (!options || !Array.isArray(options.external)) continue
+
+        options.external = options.external.filter(
+          entry => entry !== '#shared' && !(entry instanceof RegExp && entry.test(sharedProbe))
+        )
+      }
+    }
+  }
   // Vuetify 的全局配置见根目录 vuetify.config.ts
 })
