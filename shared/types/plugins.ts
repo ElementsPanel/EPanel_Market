@@ -13,6 +13,18 @@ export type PluginSide = 'panel' | 'daemon'
 /** 固定顺序，前端展示与后端推导都用它，避免顺序随文件系统变化。 */
 export const PLUGIN_SIDES = ['panel', 'daemon'] as const
 
+/**
+ * 一端声明的宿主兼容性，即 `<side>/plugin.json` 里的 `elements`：`api` 是宿主插件 API
+ * 版本，`sdk` 是浏览器 SDK 版本（只有带前端的一端才有）。
+ */
+export interface PluginCompatibility {
+  api: number
+  sdk?: number
+}
+
+/** 按端列出的兼容性；没有声明 `elements` 的端（旧包）不出现在这里。 */
+export type PluginCompatibilityMap = Partial<Record<PluginSide, PluginCompatibility>>
+
 export interface PluginVersionSummary {
   id: string
   version: string
@@ -25,6 +37,8 @@ export interface PluginVersionSummary {
   reviewNote?: string
   /** 该版本的产物里实际存在的端。 */
   sides: PluginSide[]
+  /** 该版本各端声明的兼容性，面板据此在安装前提示「需要其他版本的宿主」。 */
+  compatibility: PluginCompatibilityMap
 }
 
 /** 列表卡片用的插件摘要。版本取自最新的已通过版本。 */
@@ -39,7 +53,7 @@ export interface PluginSummary {
     id: string
     displayName: string
   }
-  /** 最新已通过版本，尚无通过版本时为 undefined。 */
+  /** 最新已通过版本（按版本号），尚无通过版本时为 undefined。 */
   latestVersion?: PluginVersionSummary
   /** 最新已通过版本的端，供卡片直接展示，不必往下钻。 */
   sides: PluginSide[]
@@ -54,7 +68,7 @@ export interface PluginSummary {
 
 export interface PluginDetail extends PluginSummary {
   description: string
-  /** 版本历史，新在前。公开详情仅含已通过版本，作者视图包含全部状态。 */
+  /** 版本历史。公开详情仅含已通过版本、按版本号新在前；作者视图包含全部状态、按提交时间新在前。 */
   versions: PluginVersionSummary[]
 }
 
@@ -76,7 +90,10 @@ export interface PluginListResult {
   pageSize: number
 }
 
-/** 面板上传时随 multipart 一起提交的插件信息。 */
+/**
+ * 从上传包里的 plugin.json 读出的插件信息（先 panel 端，再 daemon 端）。发布脚本不再
+ * 单独提交这些字段，包本身就是自描述的。
+ */
 export interface PluginUploadManifest {
   name: string
   displayName: string
@@ -91,4 +108,22 @@ export interface PluginUploadResult {
   pluginId: string
   versionId: string
   status: PluginVersionStatus
+}
+
+/** `GET /api/plugins/:id/files` 里的一个文件：面板按 `path` 逐个下载，并用大小与摘要校验。 */
+export interface PluginFileEntry {
+  path: string
+  size: number
+  sha256: string
+}
+
+/** `GET /api/plugins/:id/files`：面板安装前取的文件清单。 */
+export interface PluginFilesResult {
+  pluginId: string
+  name: string
+  displayName: string
+  versionId: string
+  version: string
+  compatibility: PluginCompatibilityMap
+  files: PluginFileEntry[]
 }

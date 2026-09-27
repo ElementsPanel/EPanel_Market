@@ -45,6 +45,17 @@ function formatSize(bytes: number) {
   return `${(bytes / 1024 / 1024).toFixed(1)} MB`
 }
 
+// 公开展示的插件信息要等版本通过审核才换，所以审核时要看得到它会改成什么
+function describeChanges(item: ConsoleReviewItem) {
+  return item.submitted.changes
+    .map((field) => {
+      if (field === 'displayName') return `名称为「${item.submitted.displayName}」`
+      if (field === 'category') return `分类为「${item.submitted.category || '无'}」`
+      return field === 'summary' ? '简介' : '说明'
+    })
+    .join('、')
+}
+
 // SSR 时 $fetch 不会自动带上浏览器 Cookie，控制台的接口靠会话鉴权，必须显式转发
 function sessionHeaders() {
   return import.meta.server ? useRequestHeaders(['cookie']) : undefined
@@ -226,6 +237,15 @@ watch(tab, (key) => load(key))
                 {{ item.plugin.displayName }}
                 <div class="text-caption text-medium-emphasis">
                   {{ item.plugin.name }}
+                </div>
+                <div v-if="item.submitted.changes.length" class="text-caption text-warning">
+                  通过后更新：{{ describeChanges(item) }}
+                </div>
+                <div
+                  v-if="item.submitted.changes.includes('summary') && item.submitted.summary"
+                  class="text-caption text-medium-emphasis"
+                >
+                  新简介：{{ item.submitted.summary }}
                 </div>
               </td>
               <td>{{ item.version }}</td>

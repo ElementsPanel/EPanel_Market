@@ -1,9 +1,10 @@
 <script setup lang="ts">
+import type { ApiTokenSummary } from '../../shared/types/auth'
 import { AVATAR_MAX_BYTES, AVATAR_MIME_TYPES } from '../../shared/utils/avatar'
 
 definePageMeta({ middleware: 'auth' })
 
-const { user, avatarUrl, updateUser, uploadAvatar, deleteAvatar } = useAuth()
+const { user, avatarUrl, updateUser, uploadAvatar, deleteAvatar, errorMessage } = useAuth()
 
 const accept = AVATAR_MIME_TYPES.join(',')
 const maxMb = AVATAR_MAX_BYTES / 1024 / 1024
@@ -129,6 +130,47 @@ async function removeAvatar() {
     avatarBusy.value = false
   }
 }
+
+// 发布令牌：ElementsPanel 的发布脚本连接市场时签发。撤销后那台机器再发布时会重新走授权。
+const tokens = ref<ApiTokenSummary[]>([])
+// 服务端渲染时还没请求过，先当作在加载：否则有令牌的人会先看到一句「还没有签发过」。
+const tokensLoading = ref(true)
+const tokensError = ref('')
+const revokingToken = ref('')
+
+async function loadTokens() {
+  tokensLoading.value = true
+  tokensError.value = ''
+  try {
+    tokens.value = (await $fetch<{ items: ApiTokenSummary[] }>('/api/account/tokens')).items
+  } catch (error) {
+    tokensError.value = errorMessage(error)
+  } finally {
+    tokensLoading.value = false
+  }
+}
+
+async function revokeToken(token: ApiTokenSummary) {
+  tokensError.value = ''
+  revokingToken.value = token.id
+  try {
+    await $fetch(`/api/account/tokens/${encodeURIComponent(token.id)}`, { method: 'DELETE' })
+    tokens.value = tokens.value.filter(item => item.id !== token.id)
+  } catch (error) {
+    tokensError.value = errorMessage(error)
+  } finally {
+    revokingToken.value = ''
+  }
+}
+
+function tokenSubtitle(token: ApiTokenSummary) {
+  const issued = new Date(token.createdAt).toLocaleString('zh-CN')
+  const used = token.lastUsedAt ? new Date(token.lastUsedAt).toLocaleString('zh-CN') : '从未使用'
+  return `签发于 ${issued} · 最近使用：${used}`
+}
+
+// 令牌列表只在浏览器里取：页面本身要登录，服务端渲染时不必替它转发 Cookie
+onMounted(loadTokens)
 </script>
 
 <template>
@@ -244,6 +286,44 @@ async function removeAvatar() {
               修改密码
             </v-btn>
           </v-card-actions>
+        </v-card>
+
+        <v-card class="mt-4">
+          <v-card-title class="text-h6">
+            发布令牌
+          </v-card-title>
+          <v-card-subtitle>
+            ElementsPanel 的发布脚本连接市场时签发，只能用来上传插件和查看你的提交记录
+          </v-card-subtitle>
+
+          <v-card-text>
+            <v-alert v-if="tokensError" type="error" class="mb-4" :text="tokensError" />
+            <v-progress-linear v-if="tokensLoading" indeterminate class="mb-2" />
+            <div v-else-if="!tokens.length" class="text-body-2 text-medium-emphasis">
+              还没有签发过发布令牌
+            </div>
+            <v-list v-if="tokens.length" density="compact" class="pa-0">
+              <v-list-item
+                v-for="token in tokens"
+                :key="token.id"
+                :title="token.name || '发布令牌'"
+                :subtitle="tokenSubtitle(token)"
+              >
+                <template #append>
+                  <v-btn
+                    size="small"
+                    color="error"
+                    variant="text"
+                    :loading="revokingToken === token.id"
+                    :disabled="Boolean(revokingToken) && revokingToken !== token.id"
+                    @click="revokeToken(token)"
+                  >
+                    撤销
+                  </v-btn>
+                </template>
+              </v-list-item>
+            </v-list>
+          </v-card-text>
         </v-card>
       </v-col>
     </v-row>
