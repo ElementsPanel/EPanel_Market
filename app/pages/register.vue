@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import { safeNextPath, withNextPath } from '../utils/nextPath'
+
 definePageMeta({ layout: 'blank' })
 
 const email = ref('')
@@ -7,6 +9,11 @@ const password = ref('')
 const confirm = ref('')
 const loading = ref(false)
 const errorMessage = ref('')
+
+// 从授权页经登录页过来的新用户，注册完同样要回到授权页
+const route = useRoute()
+const nextPath = computed(() => safeNextPath(route.query.next))
+const loginUrl = computed(() => withNextPath('/login', nextPath.value))
 
 async function submit() {
   errorMessage.value = ''
@@ -23,7 +30,7 @@ async function submit() {
       password: password.value,
       displayName: displayName.value || undefined,
     })
-    await navigateTo('/')
+    await navigateTo(nextPath.value)
   } catch (error) {
     errorMessage.value = (error as Error).message
   } finally {
@@ -51,7 +58,7 @@ async function submit() {
           </v-card-text>
 
           <v-card-actions>
-            <v-btn variant="text" to="/login">
+            <v-btn variant="text" :to="loginUrl">
               已有账户？去登录
             </v-btn>
             <v-spacer />

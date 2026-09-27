@@ -1,7 +1,9 @@
+import { createHash } from 'node:crypto'
 import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs'
 import { dirname, isAbsolute, join, normalize, relative, sep } from 'node:path'
-import { PLUGIN_SIDES, type PluginSide } from '../../shared/types/plugins'
+import { PLUGIN_SIDES, type PluginCompatibilityMap, type PluginSide } from '../../shared/types/plugins'
 import { getDataDir } from './paths'
+import { PLUGIN_PACKAGE_EXTENSIONS, parseCompatibility } from './package-rules'
 
 /**
  * 上传产物的落盘位置。所有路径都必须由这里生成或由 `safeRelativePath` 校验，
@@ -9,20 +11,11 @@ import { getDataDir } from './paths'
  */
 
 const ID_PATTERN = /^[A-Za-z0-9_-]{1,64}$/
-const ALLOWED_EXTENSIONS = new Set([
-  '.json',
-  '.js',
-  '.cjs',
-  '.mjs',
-  '.ts',
-  '.vue',
-  '.css',
-  '.scss',
-  '.md',
-  '.txt',
-  // 插件在工作区根目录放的图标，随包发布。
-  '.png',
-])
+/**
+ * 读写产物时认的扩展名。包里能放什么由上传时的 `checkPluginPackage` 决定；这里再宽出
+ * 早先规则允许过的 `.ts`、`.vue` 与 `.png`，已经上架的旧包仍然取得到。
+ */
+const ALLOWED_EXTENSIONS = new Set([...PLUGIN_PACKAGE_EXTENSIONS, '.ts', '.vue', '.png'])
 
 /** 图标是插件的门面：固定文件名，放在包里某一端的根目录（`<side>/icon.png`）。 */
 const ICON_FILE = 'icon.png'
@@ -95,6 +88,7 @@ export function writeArtifactFile(relativePath: string, relativeFile: string, da
 export function removeArtifactDir(relativePath: string): void {
   if (!relativePath) return
   rmSync(artifactAbsolutePath(relativePath), { recursive: true, force: true })
+  derivedCache.delete(relativePath)
 }
 
 /** 下载时逐文件取用：路径仍要过 safeRelativePath，产物目录之外一律拒绝。 */
@@ -107,11 +101,18 @@ export function readArtifactFile(relativePath: string, relativeFile: string): Bu
   return readFileSync(target)
 }
 
-export function listArtifactFiles(relativePath: string): Array<{ path: string; size: number }> {
+/** 产物里的一个文件。`mtimeMs` 只用来认出目录变了，不对外展示。 */
+interface ArtifactFile {
+  path: string
+  size: number
+  mtimeMs: number
+}
+
+export function listArtifactFiles(relativePath: string): ArtifactFile[] {
   const root = artifactAbsolutePath(relativePath)
   if (!existsSync(root)) return []
 
-  const files: Array<{ path: string; size: number }> = []
+  const files: ArtifactFile[] = []
   const walk = (directory: string) => {
     for (const item of readdirSync(directory, { withFileTypes: true })) {
       // 软链指向产物目录之外，只按它本身是文件还是目录来处理会读错东西。
@@ -121,9 +122,11 @@ export function listArtifactFiles(relativePath: string): Array<{ path: string; s
         walk(target)
         continue
       }
+      const stats = statSync(target)
       files.push({
         path: relative(root, target).split(sep).join('/'),
-        size: statSync(target).size,
+        size: stats.size,
+        mtimeMs: stats.mtimeMs,
       })
     }
   }
@@ -133,12 +136,114 @@ export function listArtifactFiles(relativePath: string): Array<{ path: string; s
 }
 
 /**
+ * 一个版本的产物是写一次就不再改的：上传把它写进一个新建的 versionId 目录，之后只会被
+ * 整个删掉。所以从产物推导出来的东西——端、图标、兼容性、文件摘要——可以缓存下来，不必
+ * 每个请求都重新读一遍文件；`/files` 要把整个包哈希一遍，那是公开接口，更不能每次都算。
+ *
+ * 缓存不是按目录名认的，而是按目录当下的样子（文件清单 + 大小 + 修改时间）：走一遍目录
+ * 很便宜，读完所有字节才贵。这样即使有人在接口之外动了产物（开发时手改、测试里直接写），
+ * 读到的也是新内容，缓存只省掉真正重复的那部分工作。
+ *
+ * 条目数有上限，超出就整个丢掉重来，免得一个长跑进程把每个见过的版本都留在内存里。
+ */
+const DERIVED_CACHE_LIMIT = 512
+const derivedCache = new Map<string, { signature: string; values: Map<string, unknown> }>()
+
+function signatureOf(files: ArtifactFile[]): string {
+  return JSON.stringify(files.map((file) => [file.path, file.size, file.mtimeMs]))
+}
+
+function derived<T>(
+  relativePath: string,
+  key: string,
+  compute: (files: ArtifactFile[]) => T
+): T {
+  const files = listArtifactFiles(relativePath)
+  const signature = signatureOf(files)
+  let entry = derivedCache.get(relativePath)
+  if (!entry || entry.signature !== signature) {
+    if (derivedCache.size >= DERIVED_CACHE_LIMIT) derivedCache.clear()
+    entry = { signature, values: new Map<string, unknown>() }
+    derivedCache.set(relativePath, entry)
+  }
+  if (!entry.values.has(key)) entry.values.set(key, compute(files))
+  return entry.values.get(key) as T
+}
+
+/**
+ * 文件清单附带每个文件的 SHA-256。面板安装前用它和大小核对下载到的字节，传坏的、
+ * 被截断的文件在写盘之前就会被拒绝。
+ */
+export function listArtifactFileDigests(
+  relativePath: string
+): Array<{ path: string; size: number; sha256: string }> {
+  return derived(relativePath, 'digests', (files) =>
+    files.map((file) => {
+      const data = readArtifactFile(relativePath, file.path)
+      return {
+        path: file.path,
+        size: data.byteLength,
+        sha256: createHash('sha256').update(data).digest('hex'),
+      }
+    })
+  )
+}
+
+/** 某一端的 plugin.json；这一端不存在或清单读不出一个 JSON 对象时返回 null。 */
+function readSideManifest(relativePath: string, side: PluginSide): Record<string, unknown> | null {
+  try {
+    const value: unknown = JSON.parse(
+      readArtifactFile(relativePath, `${side}/plugin.json`).toString('utf8')
+    )
+    return value && typeof value === 'object' && !Array.isArray(value)
+      ? (value as Record<string, unknown>)
+      : null
+  } catch {
+    return null
+  }
+}
+
+/** 描述整包的清单：先 panel 端，再看 daemon 端，与上传时取插件信息的顺序一致。 */
+export function readArtifactManifest(relativePath: string): Record<string, unknown> | null {
+  for (const side of PLUGIN_SIDES) {
+    const manifest = readSideManifest(relativePath, side)
+    if (manifest) return manifest
+  }
+  return null
+}
+
+/**
+ * 该版本各端声明的兼容性（`<side>/plugin.json` 的 `elements`）。与端、自述一样从产物推导，
+ * 不存数据库字段。没有声明的端是旧包，不出现在结果里；声明了却读不懂的（只可能是新规则
+ * 之前上传的包）报成 `api: 0`：版本号按约定从 1 起，所以它与任何客户端都不匹配
+ * （`assertClientCompatible` 只认正整数），面板会把它当作不兼容。
+ *
+ * 版本摘要每一行都要用到它，列表和控制台一次请求会算很多行，所以同样按产物缓存。
+ */
+export function readArtifactCompatibility(relativePath: string): PluginCompatibilityMap {
+  return derived(relativePath, 'compatibility', () => {
+    const compatibility: PluginCompatibilityMap = {}
+    for (const side of PLUGIN_SIDES) {
+      const manifest = readSideManifest(relativePath, side)
+      if (!manifest) continue
+      const contract = parseCompatibility(manifest.elements)
+      if (contract !== undefined) compatibility[side] = contract ?? { api: 0 }
+    }
+    return compatibility
+  })
+}
+
+/**
  * 该版本产物里实际存在的端。首段路径就是端，所以从文件清单推导，不需要额外的
  * 数据库列——这个项目没有迁移机制，加列会让已有的库静默缺列。
+ *
+ * 列表、详情与控制台的每一个版本摘要都要问一次，所以同样按产物缓存。
  */
 export function listArtifactSides(relativePath: string): PluginSide[] {
-  const segments = new Set(listArtifactFiles(relativePath).map((file) => file.path.split('/')[0]))
-  return PLUGIN_SIDES.filter((side) => segments.has(side))
+  return derived(relativePath, 'sides', (files) => {
+    const segments = new Set(files.map((file) => file.path.split('/')[0]))
+    return PLUGIN_SIDES.filter((side) => segments.has(side))
+  })
 }
 
 /**
@@ -159,11 +264,9 @@ export function listSideEntries(
 }
 
 /**
- * 包里的自述。先看 panel 端再看 daemon 端，与 plugin.json 的取用顺序一致；两端都没有
- * 就返回空串——README.md 是可选的，不因为它缺席而让详情页报错。
- *
- * 清单已按路径排序，`<side>/README.md` 会排在 `<side>/backend/...` 之前，取第一个命中
- * 即可（大小写不敏感）。
+ * 包里的自述，即某一端根目录的 `README.md`（文件名大小写不敏感）。先看 panel 端再看
+ * daemon 端，与 plugin.json 的取用顺序一致；两端都没有就返回空串——README.md 是可选的，
+ * 不因为它缺席而让详情页报错。只认端的根目录：更深处的 readme.md 属于别的东西。
  */
 export function readArtifactReadme(relativePath: string): string {
   const files = listArtifactFiles(relativePath)
@@ -171,8 +274,7 @@ export function readArtifactReadme(relativePath: string): string {
     const prefix = `${side}/`
     const found = files.find(
       (file) =>
-        file.path.startsWith(prefix) &&
-        file.path.slice(prefix.length).split('/').pop()?.toLowerCase() === 'readme.md'
+        file.path.startsWith(prefix) && file.path.slice(prefix.length).toLowerCase() === 'readme.md'
     )
     if (found) return readArtifactFile(relativePath, found.path).toString('utf8')
   }
@@ -187,12 +289,13 @@ export function readArtifactReadme(relativePath: string): string {
  * 静默缺列。
  */
 export function findArtifactIcon(relativePath: string): string | null {
-  const files = listArtifactFiles(relativePath)
-  for (const side of PLUGIN_SIDES) {
-    const found = files.find((file) => file.path === `${side}/${ICON_FILE}`)
-    if (found) return found.path
-  }
-  return null
+  return derived(relativePath, 'icon', (files) => {
+    for (const side of PLUGIN_SIDES) {
+      const found = files.find((file) => file.path === `${side}/${ICON_FILE}`)
+      if (found) return found.path
+    }
+    return null
+  })
 }
 
 /**

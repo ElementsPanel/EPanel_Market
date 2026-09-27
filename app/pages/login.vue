@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import { safeNextPath, withNextPath } from '../utils/nextPath'
+
 definePageMeta({ layout: 'blank' })
 
 const email = ref('')
@@ -6,12 +8,10 @@ const password = ref('')
 const loading = ref(false)
 const errorMessage = ref('')
 
-// 从插件市场授权页过来时带 next，登录完要回到授权页而不是首页
+// 从插件市场授权页过来时带 next，登录完要回到授权页而不是首页；去注册也带着它
 const route = useRoute()
-const nextPath = computed(() => {
-  const next = route.query.next
-  return typeof next === 'string' && next.startsWith('/') ? next : '/'
-})
+const nextPath = computed(() => safeNextPath(route.query.next))
+const registerUrl = computed(() => withNextPath('/register', nextPath.value))
 
 async function submit() {
   errorMessage.value = ''
@@ -44,7 +44,7 @@ async function submit() {
           </v-card-text>
 
           <v-card-actions>
-            <v-btn variant="text" to="/register">
+            <v-btn variant="text" :to="registerUrl">
               还没有账户？去注册
             </v-btn>
             <v-spacer />

@@ -3,9 +3,18 @@ import { and, desc, eq, inArray, like, or, type InferSelectModel } from 'drizzle
 import type { AppTables } from '../db/schema'
 import { getDb } from '../db/client'
 import { appError } from '../utils/errors'
-import { artifactRelativePath, hasArtifactIcon, listArtifactSides, readArtifactReadme, removeArtifactDir } from '../utils/artifacts'
+import {
+  artifactRelativePath,
+  hasArtifactIcon,
+  listArtifactSides,
+  readArtifactCompatibility,
+  readArtifactManifest,
+  readArtifactReadme,
+  removeArtifactDir,
+} from '../utils/artifacts'
 import { renderMarkdown } from '../utils/markdown'
 import type {
+  PluginCompatibilityMap,
   PluginDetail,
   PublishedPluginDetail,
   PluginListResult,
@@ -16,15 +25,72 @@ import type {
   PluginVersionSummary,
   PluginVisibility,
 } from '../../shared/types/plugins'
-import type { ConsolePluginItem, ConsoleReviewItem } from '../../shared/types/console'
+import type { ConsolePluginItem, ConsoleReviewItem, ReviewMetadataField } from '../../shared/types/console'
 import type { UserRow } from './users'
 
 export type PluginRow = InferSelectModel<AppTables['plugins']>
 export type PluginVersionRow = InferSelectModel<AppTables['pluginVersions']>
 
+/**
+ * 插件标识：发布时的 slug，也是面板与 daemon 上的安装目录名，所以 Windows 设备名不能用。
+ * 规则与 ElementsPanel 的发布脚本、插件脚手架一致。
+ */
 const NAME_PATTERN = /^[a-z][a-z0-9_-]{1,63}$/
+const RESERVED_NAME = /^(con|prn|aux|nul|com[1-9]|lpt[1-9])$/
 const VERSION_PATTERN = /^[0-9][^\s]{0,31}$/
 export const PAGE_SIZE = 12
+
+/** 版本号里的一段：纯数字按数值比（任意长度），其余按字符串比，数字段低于字母段。 */
+function compareIdentifier(a: string, b: string): number {
+  const numeric = /^\d+$/
+  if (numeric.test(a) && numeric.test(b)) {
+    const left = a.replace(/^0+(?=\d)/, '')
+    const right = b.replace(/^0+(?=\d)/, '')
+    if (left.length !== right.length) return left.length < right.length ? -1 : 1
+    return left < right ? -1 : left > right ? 1 : 0
+  }
+  if (numeric.test(a)) return -1
+  if (numeric.test(b)) return 1
+  return a < b ? -1 : a > b ? 1 : 0
+}
+
+/**
+ * 按版本号比较，规则同 semver：主体逐段比，缺的段当 0；带预发布标记（`-beta.1`）的低于
+ * 对应的正式版，预发布之间逐段比；构建元数据（`+...`）不参与。任意字符串都能比较，所以
+ * 不合 semver 的版本号也有稳定的顺序。
+ */
+export function compareVersions(a: string, b: string): number {
+  const parse = (value: string) => {
+    const [core = '', ...pre] = value.split('+')[0]!.split('-')
+    return { core: core.split('.'), pre: pre.join('-') }
+  }
+  const left = parse(a)
+  const right = parse(b)
+  for (let index = 0; index < Math.max(left.core.length, right.core.length); index += 1) {
+    const diff = compareIdentifier(left.core[index] ?? '0', right.core[index] ?? '0')
+    if (diff) return diff
+  }
+  if (left.pre === right.pre) return 0
+  if (!left.pre) return 1
+  if (!right.pre) return -1
+  const leftParts = left.pre.split('.')
+  const rightParts = right.pre.split('.')
+  for (let index = 0; index < Math.max(leftParts.length, rightParts.length); index += 1) {
+    if (leftParts[index] === undefined) return -1
+    if (rightParts[index] === undefined) return 1
+    const diff = compareIdentifier(leftParts[index]!, rightParts[index]!)
+    if (diff) return diff
+  }
+  return 0
+}
+
+/** 发布顺序：版本号高的在前，版本号相同时后提交的在前。「最新版本」就是排在第一的。 */
+function byRelease(
+  a: { version: string; submittedAt: number },
+  b: { version: string; submittedAt: number }
+): number {
+  return compareVersions(b.version, a.version) || b.submittedAt - a.submittedAt
+}
 
 function toVersionSummary(row: PluginVersionRow): PluginVersionSummary {
   return {
@@ -38,6 +104,7 @@ function toVersionSummary(row: PluginVersionRow): PluginVersionSummary {
     reviewedAt: row.reviewedAt ?? undefined,
     reviewNote: row.reviewNote ?? undefined,
     sides: listArtifactSides(row.artifactPath),
+    compatibility: readArtifactCompatibility(row.artifactPath),
   }
 }
 
@@ -46,11 +113,12 @@ function authorOf(users: Map<string, UserRow>, authorId: string) {
   return { id: authorId, displayName: user?.displayName ?? '未知用户' }
 }
 
-/** 同一插件的多个版本里取最新的：先比提交时间，再比版本号。 */
+/**
+ * 同一插件的多个版本里取最新的：看版本号，而不是提交时间——给旧版本线补发一个修复版，
+ * 不能让面板的「安装最新版」降级。
+ */
 function newestVersion(rows: PluginVersionRow[]): PluginVersionRow | undefined {
-  return [...rows].sort(
-    (a, b) => b.submittedAt - a.submittedAt || b.version.localeCompare(a.version)
-  )[0]
+  return [...rows].sort(byRelease)[0]
 }
 
 async function loadAuthors(authorIds: string[]): Promise<Map<string, UserRow>> {
@@ -190,9 +258,7 @@ export async function getPluginDetail(
     ...toSummary(plugin, users, latest),
     description: plugin.description,
     selectedVersion: toVersionSummary(selected),
-    versions: approved.map(toVersionSummary).sort(
-      (a, b) => b.submittedAt - a.submittedAt || b.version.localeCompare(a.version)
-    ),
+    versions: [...approved].sort(byRelease).map(toVersionSummary),
     readme,
     readmeHtml: renderMarkdown(readme),
   }
@@ -229,7 +295,14 @@ export function validateUploadManifest(input: Partial<PluginUploadManifest>): Pl
   const version = String(input.version ?? '').trim()
 
   if (!NAME_PATTERN.test(name)) {
-    throw appError(400, 'VALIDATION_ERROR', '插件标识只能包含小写字母、数字、下划线与连字符')
+    throw appError(
+      400,
+      'VALIDATION_ERROR',
+      '插件标识须为 2-64 位小写字母、数字、下划线或连字符，并以字母开头'
+    )
+  }
+  if (RESERVED_NAME.test(name)) {
+    throw appError(400, 'VALIDATION_ERROR', `插件标识不能是 Windows 设备名：${name}`)
   }
   if (!displayName || displayName.length > 64) {
     throw appError(400, 'VALIDATION_ERROR', '请填写 1-64 个字符的插件名称')
@@ -268,7 +341,31 @@ export function manifestFromPluginJson(value: unknown): PluginUploadManifest {
   })
 }
 
-/** 找到作者名下的插件，没有就创建。同名插件属于不同的人时直接拒绝。 */
+/** 插件信息里会公开展示、要经过审核的那几项。 */
+function publicMetadata(manifest: PluginUploadManifest) {
+  return {
+    displayName: manifest.displayName,
+    summary: manifest.summary ?? '',
+    description: manifest.description ?? '',
+    category: manifest.category ?? '',
+  }
+}
+
+async function hasApprovedVersion(pluginId: string): Promise<boolean> {
+  const approved = (await loadVersions([pluginId], 'approved')).get(pluginId) ?? []
+  return approved.length > 0
+}
+
+/**
+ * 找到作者名下的插件，没有就创建。
+ *
+ * 插件标识在全市场唯一：它是面板与 daemon 上的安装目录名，两个作者的同名插件没法装在
+ * 同一台机器上，所以别人已经用了的标识直接拒绝。
+ *
+ * 已上架插件的名称、简介、说明与分类不在上传时改——它们是公开展示的内容，要等这个版本
+ * 通过审核（见 `reviewVersion`）才换成新包里的那一份；「更新时间」同理。还没有任何版本
+ * 通过审核的插件不公开，照常更新，作者和审核员看到的就是最新提交的信息。
+ */
 export async function resolvePluginForUpload(
   authorId: string,
   manifest: PluginUploadManifest
@@ -277,30 +374,17 @@ export async function resolvePluginForUpload(
   const existing = await db
     .select()
     .from(tables.plugins)
-    .where(and(eq(tables.plugins.authorId, authorId), eq(tables.plugins.name, manifest.name)))
-    .limit(1)
+    .where(eq(tables.plugins.name, manifest.name))
 
-  const plugin = existing[0]
+  const plugin = existing.find((row) => row.authorId === authorId)
   if (plugin) {
-    const updatedAt = Date.now()
-    await db
-      .update(tables.plugins)
-      .set({
-        displayName: manifest.displayName,
-        summary: manifest.summary ?? '',
-        description: manifest.description ?? '',
-        category: manifest.category ?? '',
-        updatedAt,
-      })
-      .where(eq(tables.plugins.id, plugin.id))
-    return {
-      ...plugin,
-      displayName: manifest.displayName,
-      summary: manifest.summary ?? '',
-      description: manifest.description ?? '',
-      category: manifest.category ?? '',
-      updatedAt,
-    }
+    if (await hasApprovedVersion(plugin.id)) return plugin
+    const patch = { ...publicMetadata(manifest), updatedAt: Date.now() }
+    await db.update(tables.plugins).set(patch).where(eq(tables.plugins.id, plugin.id))
+    return { ...plugin, ...patch }
+  }
+  if (existing.length) {
+    throw appError(409, 'CONFLICT', `插件标识 ${manifest.name} 已被其他作者使用，请换一个 id`)
   }
 
   const created = await db
@@ -309,10 +393,7 @@ export async function resolvePluginForUpload(
       id: randomUUID(),
       name: manifest.name,
       authorId,
-      displayName: manifest.displayName,
-      summary: manifest.summary ?? '',
-      description: manifest.description ?? '',
-      category: manifest.category ?? '',
+      ...publicMetadata(manifest),
       visibility: 'listed',
       createdAt: Date.now(),
       updatedAt: Date.now(),
@@ -405,11 +486,56 @@ export function resolveDownloadSide(sides: PluginSide[], requested?: string): Pl
   throw appError(400, 'VALIDATION_ERROR', '请指定要下载的端：panel 或 daemon')
 }
 
+/**
+ * `/files` 的兼容性协商。包声明了宿主插件 API / 浏览器 SDK 版本时，客户端要带着自己支持
+ * 的 `pluginApi` / `pluginSdk` 来取，而且必须一致；不带参数的旧客户端只能取没有声明的旧包。
+ * 不兼容返回 409，面板据此提示「需要其他版本的宿主」，而不是下载完才发现装不了。
+ *
+ * 客户端给的版本号必须是正整数，所以产物里读不懂的声明（报成 `api: 0`）与任何客户端都不
+ * 匹配——否则 `?pluginApi=0` 就能把它取走。
+ */
+export function assertClientCompatible(
+  compatibility: PluginCompatibilityMap,
+  client: { pluginApi?: unknown; pluginSdk?: unknown }
+): void {
+  const contracts = Object.values(compatibility).filter((contract) => contract !== undefined)
+  if (!contracts.length) return
+  const version = (value: unknown) => {
+    if (typeof value !== 'string' || !value.trim()) return undefined
+    const parsed = Number(value)
+    return Number.isInteger(parsed) && parsed >= 1 ? parsed : undefined
+  }
+  const api = version(client.pluginApi)
+  const sdk = version(client.pluginSdk)
+  for (const contract of contracts) {
+    if (
+      api === undefined ||
+      contract.api !== api ||
+      (contract.sdk !== undefined && contract.sdk !== sdk)
+    ) {
+      throw appError(409, 'CONFLICT', '这个插件需要其他版本的宿主插件 API 或浏览器 SDK')
+    }
+  }
+}
+
 /** 上传写盘失败时的回退：版本记录与磁盘产物一起消失。 */
 export async function deletePluginVersion(versionId: string, artifactPath: string): Promise<void> {
   const { db, tables } = await getDb()
   removeArtifactDir(artifactPath)
   await db.delete(tables.pluginVersions).where(eq(tables.pluginVersions.id, versionId))
+}
+
+const REVIEW_METADATA_FIELDS: ReviewMetadataField[] = ['displayName', 'summary', 'description', 'category']
+
+/** 一个版本包里 plugin.json 描述的插件信息；读不出合法的信息时返回 null。 */
+function versionMetadata(version: PluginVersionRow) {
+  const raw = readArtifactManifest(version.artifactPath)
+  if (!raw) return null
+  try {
+    return publicMetadata(manifestFromPluginJson(raw))
+  } catch {
+    return null
+  }
 }
 
 export async function listReviewQueue(): Promise<ConsoleReviewItem[]> {
@@ -426,6 +552,14 @@ export async function listReviewQueue(): Promise<ConsoleReviewItem[]> {
   return rows.map((version) => {
     const plugin = plugins.find((candidate) => candidate.id === version.pluginId)
     const author = authors.get(plugin?.authorId ?? '')
+    const current = {
+      displayName: plugin?.displayName ?? '',
+      summary: plugin?.summary ?? '',
+      description: plugin?.description ?? '',
+      category: plugin?.category ?? '',
+    }
+    // 审核员要看得到这个版本通过后公开信息会变成什么
+    const submitted = versionMetadata(version) ?? current
     return {
       versionId: version.id,
       version: version.version,
@@ -437,8 +571,15 @@ export async function listReviewQueue(): Promise<ConsoleReviewItem[]> {
       plugin: {
         id: plugin?.id ?? version.pluginId,
         name: plugin?.name ?? '',
-        displayName: plugin?.displayName ?? '',
-        category: plugin?.category ?? '',
+        displayName: current.displayName,
+        summary: current.summary,
+        category: current.category,
+      },
+      submitted: {
+        displayName: submitted.displayName,
+        summary: submitted.summary,
+        category: submitted.category,
+        changes: REVIEW_METADATA_FIELDS.filter((field) => submitted[field] !== current[field]),
       },
       author: {
         id: plugin?.authorId ?? '',
@@ -482,10 +623,23 @@ export async function reviewVersion(input: {
     })
     .where(eq(tables.pluginVersions.id, input.versionId))
 
+  // 驳回不改变任何公开内容，已上架的插件照旧。
+  if (status === 'approved') await syncPublishedMetadata(version.pluginId)
+}
+
+/**
+ * 公开展示的插件信息跟着最新的已通过版本走：审核通过后，把它包里 plugin.json 的名称、
+ * 简介、说明与分类写回插件，并刷新「更新时间」。读不出合法信息的旧包保留现有信息。
+ */
+async function syncPublishedMetadata(pluginId: string): Promise<void> {
+  const { db, tables } = await getDb()
+  const approved = (await loadVersions([pluginId], 'approved')).get(pluginId) ?? []
+  const latest = newestVersion(approved)
+  const metadata = latest ? versionMetadata(latest) : null
   await db
     .update(tables.plugins)
-    .set({ updatedAt: Date.now() })
-    .where(eq(tables.plugins.id, version.pluginId))
+    .set({ ...(metadata ?? {}), updatedAt: Date.now() })
+    .where(eq(tables.plugins.id, pluginId))
 }
 
 export async function listConsolePlugins(): Promise<ConsolePluginItem[]> {

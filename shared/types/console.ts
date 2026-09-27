@@ -17,7 +17,19 @@ export interface ConsoleReviewItem {
     id: string
     name: string
     displayName: string
+    summary: string
     category: string
+  }
+  /**
+   * 这个版本包里 plugin.json 描述的插件信息。公开展示的信息只在版本通过审核时才换成
+   * 最新已通过版本的这一份，所以审核时要看得到它改了什么。
+   */
+  submitted: {
+    displayName: string
+    summary: string
+    category: string
+    /** 与当前公开展示的信息不同的字段。 */
+    changes: ReviewMetadataField[]
   }
   author: {
     id: string
@@ -25,6 +37,9 @@ export interface ConsoleReviewItem {
     email: string
   }
 }
+
+/** 审核时关心的插件信息字段。 */
+export type ReviewMetadataField = 'displayName' | 'summary' | 'description' | 'category'
 
 /** 控制台插件管理里的一行。 */
 export interface ConsolePluginItem {
