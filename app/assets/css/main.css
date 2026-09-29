@@ -1,3 +1,31 @@
+/* 跨布局淡出时，底色也保持当前主题。 */
+body {
+  background-color: rgb(var(--v-theme-background));
+}
+
+.page-enter-active,
+.page-leave-active,
+.layout-enter-active,
+.layout-leave-active {
+  transition: opacity 180ms ease;
+}
+
+.page-enter-from,
+.page-leave-to,
+.layout-enter-from,
+.layout-leave-to {
+  opacity: 0;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .page-enter-active,
+  .page-leave-active,
+  .layout-enter-active,
+  .layout-leave-active {
+    transition: none;
+  }
+}
+
 /* 全站输入框样式：Vuetify 的 filled 变体自带背景且没有阴影，
    但它会画一条底部横线（::before 常态、::after 聚焦时），这里直接把两个伪元素去掉。 */
 .v-field--variant-filled .v-field__outline::before,
