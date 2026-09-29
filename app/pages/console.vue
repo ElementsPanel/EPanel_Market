@@ -51,7 +51,7 @@ function describeChanges(item: ConsoleReviewItem) {
     .map((field) => {
       if (field === 'displayName') return `名称为「${item.submitted.displayName}」`
       if (field === 'category') return `分类为「${item.submitted.category || '无'}」`
-      return field === 'summary' ? '简介' : '说明'
+      return '简介'
     })
     .join('、')
 }
@@ -242,7 +242,7 @@ watch(tab, (key) => load(key))
                   通过后更新：{{ describeChanges(item) }}
                 </div>
                 <div
-                  v-if="item.submitted.changes.includes('summary') && item.submitted.summary"
+                  v-if="item.submitted.changes.includes('description') && item.submitted.summary"
                   class="text-caption text-medium-emphasis"
                 >
                   新简介：{{ item.submitted.summary }}

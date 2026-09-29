@@ -39,7 +39,7 @@ export interface ConsoleReviewItem {
 }
 
 /** 审核时关心的插件信息字段。 */
-export type ReviewMetadataField = 'displayName' | 'summary' | 'description' | 'category'
+export type ReviewMetadataField = 'displayName' | 'description' | 'category'
 
 /** 控制台插件管理里的一行。 */
 export interface ConsolePluginItem {

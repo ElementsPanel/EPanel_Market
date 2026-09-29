@@ -315,7 +315,6 @@ export function validateUploadManifest(input: Partial<PluginUploadManifest>): Pl
     name,
     displayName,
     version,
-    summary: String(input.summary ?? '').slice(0, 200),
     description: String(input.description ?? '').slice(0, 20000),
     category: String(input.category ?? '').slice(0, 32),
     changelog: String(input.changelog ?? '').slice(0, 4000),
@@ -324,7 +323,7 @@ export function validateUploadManifest(input: Partial<PluginUploadManifest>): Pl
 
 /**
  * 插件信息来自包里的 `plugin.json`：包本来就是自描述的，没必要再让发布方把同一份信息
- * 单独提交一遍。取值顺序沿用发布脚本原来的写法，行为不变。
+ * 单独提交一遍。简介只有 description 一份，列表摘要由它自动截取。
  */
 export function manifestFromPluginJson(value: unknown): PluginUploadManifest {
   const raw = (value ?? {}) as Record<string, unknown>
@@ -334,7 +333,6 @@ export function manifestFromPluginJson(value: unknown): PluginUploadManifest {
     name: id,
     displayName: String(raw.displayName ?? raw.name ?? id),
     version: String(raw.version ?? ''),
-    summary: String(raw.summary ?? description),
     description,
     category: String(raw.category ?? ''),
     changelog: String(raw.changelog ?? ''),
@@ -343,10 +341,11 @@ export function manifestFromPluginJson(value: unknown): PluginUploadManifest {
 
 /** 插件信息里会公开展示、要经过审核的那几项。 */
 function publicMetadata(manifest: PluginUploadManifest) {
+  const description = manifest.description ?? ''
   return {
     displayName: manifest.displayName,
-    summary: manifest.summary ?? '',
-    description: manifest.description ?? '',
+    summary: description.slice(0, 200),
+    description,
     category: manifest.category ?? '',
   }
 }
@@ -362,7 +361,7 @@ async function hasApprovedVersion(pluginId: string): Promise<boolean> {
  * 插件标识在全市场唯一：它是面板与 daemon 上的安装目录名，两个作者的同名插件没法装在
  * 同一台机器上，所以别人已经用了的标识直接拒绝。
  *
- * 已上架插件的名称、简介、说明与分类不在上传时改——它们是公开展示的内容，要等这个版本
+ * 已上架插件的名称、简介与分类不在上传时改——它们是公开展示的内容，要等这个版本
  * 通过审核（见 `reviewVersion`）才换成新包里的那一份；「更新时间」同理。还没有任何版本
  * 通过审核的插件不公开，照常更新，作者和审核员看到的就是最新提交的信息。
  */
@@ -525,7 +524,7 @@ export async function deletePluginVersion(versionId: string, artifactPath: strin
   await db.delete(tables.pluginVersions).where(eq(tables.pluginVersions.id, versionId))
 }
 
-const REVIEW_METADATA_FIELDS: ReviewMetadataField[] = ['displayName', 'summary', 'description', 'category']
+const REVIEW_METADATA_FIELDS: ReviewMetadataField[] = ['displayName', 'description', 'category']
 
 /** 一个版本包里 plugin.json 描述的插件信息；读不出合法的信息时返回 null。 */
 function versionMetadata(version: PluginVersionRow) {
@@ -629,7 +628,7 @@ export async function reviewVersion(input: {
 
 /**
  * 公开展示的插件信息跟着最新的已通过版本走：审核通过后，把它包里 plugin.json 的名称、
- * 简介、说明与分类写回插件，并刷新「更新时间」。读不出合法信息的旧包保留现有信息。
+ * 简介与分类写回插件，并刷新「更新时间」。读不出合法信息的包保留现有信息。
  */
 async function syncPublishedMetadata(pluginId: string): Promise<void> {
   const { db, tables } = await getDb()

@@ -98,7 +98,6 @@ export interface PluginUploadManifest {
   name: string
   displayName: string
   version: string
-  summary?: string
   description?: string
   category?: string
   changelog?: string

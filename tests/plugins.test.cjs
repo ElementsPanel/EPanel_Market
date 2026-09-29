@@ -408,6 +408,7 @@ test('the upload manifest is taken from the package plugin.json', () => {
       displayName: 'Demo',
       version: '1.2.0',
       description: 'long text',
+      summary: 'duplicate field must be ignored',
       category: 'tools',
       changelog: 'notes',
     }),
@@ -415,8 +416,6 @@ test('the upload manifest is taken from the package plugin.json', () => {
       name: 'demo',
       displayName: 'Demo',
       version: '1.2.0',
-      // summary 缺失时退到 description，和发布脚本原来的取值顺序一致
-      summary: 'long text',
       description: 'long text',
       category: 'tools',
       changelog: 'notes',
@@ -433,7 +432,7 @@ test('a plugin.json without the market fields falls back to what it has, and a b
   })
   assert.equal(manifest.name, 'demo')
   assert.equal(manifest.displayName, 'Demo plugin')
-  assert.equal(manifest.summary, '')
+  assert.equal(manifest.description, '')
 
   assert.throws(() => service.manifestFromPluginJson({ id: 'Bad Id', version: '1.0.0' }), {
     statusCode: 400,
@@ -570,7 +569,7 @@ test('uploading a new version does not change what a published plugin shows', as
   const manifest = service.manifestFromPluginJson({
     id: 'one',
     displayName: 'Renamed',
-    summary: 'New summary',
+    description: 'New description',
     version: '5.0.0',
   })
   const resolved = await service.resolvePluginForUpload('author', manifest)
@@ -594,7 +593,6 @@ test('approving a version publishes the details of the newest approved release',
       id: 'one',
       version: '3.0.0',
       displayName: 'Three',
-      summary: 'Third',
       description: 'Long third',
       category: 'games',
     },
@@ -603,7 +601,7 @@ test('approving a version publishes the details of the newest approved release',
   await service.reviewVersion({ versionId: 'v3', action: 'approve', reviewerId: 'admin' })
   assert.equal(versions[2].status, 'approved')
   assert.equal(plugin.displayName, 'Three')
-  assert.equal(plugin.summary, 'Third')
+  assert.equal(plugin.summary, 'Long third')
   assert.equal(plugin.description, 'Long third')
   assert.equal(plugin.category, 'games')
   assert.ok(plugin.updatedAt > 0)
@@ -642,7 +640,6 @@ test('the review queue shows what approving a version would change', async () =>
       id: 'one',
       version: '3.0.0',
       displayName: 'Three',
-      summary: 'First summary',
       description: 'Rewritten',
       category: 'tools',
     },

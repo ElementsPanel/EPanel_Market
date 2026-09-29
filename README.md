@@ -139,9 +139,9 @@ ElementsPanel 的插件市场页在浏览器里搜索、筛选，所以它的后
 
 **插件信息**先取包里的 `panel/plugin.json`，仅在 daemon-only 包里回退到 `daemon/plugin.json`，
 不再要求发布方额外提交一份 manifest：
-包本来就是自描述的（`id` 是发布用的 slug，`displayName`/`summary`/`category`/`changelog`
-是市场页面展示的字段）。取值顺序与原发布脚本一致：`name ← id`、
-`displayName ← displayName ?? name ?? id`、`summary ← summary ?? description`。缺少
+包本来就是自描述的（`id` 是发布用的 slug，`displayName`/`description`/`category`/`changelog`
+是市场页面展示的字段）。`description` 是唯一的插件简介，列表摘要自动取它的前 200 个字符；
+名称按 `displayName ← displayName ?? name ?? id` 解析。缺少
 `panel/plugin.json` 与 `daemon/plugin.json` 的上传会被拒绝。
 
 插件标识（`id`）须为 2-64 位小写字母、数字、下划线或连字符，以字母开头，不能是 Windows 设备名。
