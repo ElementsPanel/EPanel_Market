@@ -98,14 +98,16 @@ ElementsPanel 的插件市场页在浏览器里搜索、筛选，所以它的后
 ## 插件包的两端与清单来源
 
 发布方的开发工作区 `external/<name>/` 是两个彼此独立的半边：`panel/` 与 `daemon/` 各自带一份
-`plugin.json`，各自描述自己那份插件。没有「工作区根目录的 plugin.json」这一步，编译也不会把
-一份清单拆成两半——它读的是 `<side>/plugin.json`，逐端产出。产物包里首段路径就是端
+`plugin.json`。双端插件的市场元数据只写在 `panel/plugin.json`；`daemon/plugin.json` 可以只写
+运行入口。没有「工作区根目录的 plugin.json」这一步，编译也不会把一份清单拆成两半——它读的是
+`<side>/plugin.json`，逐端产出。产物包里首段路径就是端
 （`panel/...`、`daemon/...`），下面各节写的 `<side>/` 指的就是它。
 
-市场把一个包**当成一个插件**上架，所以清单、自述与图标都按同一个顺序解析：先看 `panel/`，
-没有再看 `daemon/`（清单见 `server/utils/package-rules.ts` 的 `checkPluginPackage`，自述见
-`readArtifactReadme`，图标见 `findArtifactIcon`）。两端各写各的清单，市场只取描述整包的那一份：
-有 panel 端时以它为准，daemon-only 工作区则用 daemon 端那份。
+市场把一个包**当成一个插件**上架，所以清单、自述与图标都按同一个顺序解析：先解析 `panel/`，
+只有不存在 panel 端时才回退到 `daemon/`（清单见 `server/utils/package-rules.ts` 的
+`checkPluginPackage`，自述见 `readArtifactReadme`，图标见 `findArtifactIcon`）。市场只取描述整包的
+那一份：有 panel 端时以它为准，且不会要求 daemon 清单重复 `id`、版本或简介；daemon-only 工作区
+才由 daemon 清单携带这些元数据。
 
 ## 上传包的内容规则
 
@@ -135,7 +137,8 @@ ElementsPanel 的插件市场页在浏览器里搜索、筛选，所以它的后
 白名单与面板的 `markdownToHTML` 完全一致（`server/utils/markdown.ts`，含列表项 `li` 与表头
 `thead`），两边要一起改。
 
-**插件信息**取自包里的 `<side>/plugin.json`，不再要求发布方额外提交一份 manifest：
+**插件信息**先取包里的 `panel/plugin.json`，仅在 daemon-only 包里回退到 `daemon/plugin.json`，
+不再要求发布方额外提交一份 manifest：
 包本来就是自描述的（`id` 是发布用的 slug，`displayName`/`summary`/`category`/`changelog`
 是市场页面展示的字段）。取值顺序与原发布脚本一致：`name ← id`、
 `displayName ← displayName ?? name ?? id`、`summary ← summary ?? description`。缺少

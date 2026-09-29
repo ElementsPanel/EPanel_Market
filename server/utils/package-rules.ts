@@ -178,5 +178,10 @@ export function checkPluginPackage(entries: PackageEntry[]): CheckedPackage {
     manifests.set(side, manifest)
   }
 
-  return { sides, manifest: manifests.get(sides[0]!)!, compatibility }
+  // A normal two-sided plugin keeps all market metadata in the panel manifest;
+  // its daemon manifest may contain only the runtime entry. A daemon-only
+  // plugin necessarily falls back to its own manifest.
+  const manifest = manifests.get('panel') ?? manifests.get('daemon')
+  if (!manifest) invalid('插件包里没有可读取的 plugin.json')
+  return { sides, manifest, compatibility }
 }

@@ -49,7 +49,8 @@ export default defineEventHandler(async (event) => {
   }
 
   // 按面板与 daemon 安装时的规则把整个包查一遍：通过审核的包必须装得上。插件信息取自
-  // 描述整包的那份 plugin.json（有 panel 端用它，daemon-only 包用 daemon 端的）。
+  // 描述整包的那份 plugin.json：明确先取 panel；只有 daemon-only 包才回退到 daemon。
+  // 双端插件的 daemon 清单可以只含运行入口，不需要复制市场元数据。
   const checked = checkPluginPackage(entries)
   const manifest = manifestFromPluginJson(checked.manifest)
 

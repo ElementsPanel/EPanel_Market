@@ -91,8 +91,8 @@ export interface PluginListResult {
 }
 
 /**
- * 从上传包里的 plugin.json 读出的插件信息（先 panel 端，再 daemon 端）。发布脚本不再
- * 单独提交这些字段，包本身就是自描述的。
+ * 从上传包里描述整包的 plugin.json 读出的插件信息：先 panel 端，仅在 daemon-only
+ * 插件中回退到 daemon 端。双端插件的 daemon 清单可以只有运行入口。
  */
 export interface PluginUploadManifest {
   name: string

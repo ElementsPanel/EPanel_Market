@@ -731,8 +731,6 @@ function packageEntries(overrides = {}) {
     'panel/README.md': '# demo',
     'panel/icon.png': pngBytes,
     'daemon/plugin.json': JSON.stringify({
-      id: 'demo',
-      version: '1.0.0',
       elements: { api: 1 },
       backend: 'backend/index.cjs',
     }),
@@ -755,10 +753,19 @@ test('a compiled package passes the upload check with its sides and compatibilit
     .map((entry) => entry.path)
     .filter((file) => file.startsWith('panel/'))
   const daemonOnly = checkPluginPackage(
-    packageEntries(Object.fromEntries(panelFiles.map((file) => [file, undefined])))
+    packageEntries({
+      ...Object.fromEntries(panelFiles.map((file) => [file, undefined])),
+      'daemon/plugin.json': JSON.stringify({
+        id: 'daemon-only',
+        version: '1.0.0',
+        elements: { api: 1 },
+        backend: 'backend/index.cjs',
+      }),
+    })
   )
   assert.deepEqual(daemonOnly.sides, ['daemon'])
   assert.deepEqual(daemonOnly.compatibility, { daemon: { api: 1 } })
+  assert.equal(daemonOnly.manifest.id, 'daemon-only')
 })
 
 test('the upload refuses every package the panel or a daemon could not install', () => {
