@@ -34,7 +34,7 @@ export default {
     defaultSet: 'mdi'
   },
   theme: {
-    defaultTheme: 'light',
+    defaultTheme: 'system',
     themes: {
       light: {
         colors: {

@@ -11,7 +11,7 @@ const logoSrc = computed(() => theme.global.current.value.dark ? '/images/epanel
   <v-app-bar class="app-header" density="comfortable">
     <div class="app-header__brand">
       <NuxtLink to="/" class="app-header__home" aria-label="元素面板插件市场首页">
-        <img :src="logoSrc" class="app-header__logo" alt="元素面板" width="36" height="36" />
+        <img :src="logoSrc" class="app-header__logo" alt="元素面板" width="32" height="32" />
       </NuxtLink>
       <v-btn
         :icon="colorModeIcon"
@@ -74,6 +74,10 @@ const logoSrc = computed(() => theme.global.current.value.dark ? '/images/epanel
 
 .app-header :deep(.v-toolbar__content) {
   padding-inline: var(--site-gutter);
+}
+
+.app-header :deep(.v-toolbar__append) {
+  gap: 12px;
 }
 
 .app-header__brand {

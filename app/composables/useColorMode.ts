@@ -8,14 +8,14 @@ const modes = {
 
 export function useColorMode() {
   const savedMode = useCookie<string>('epanel-color-mode', {
-    default: () => 'light',
+    default: () => 'system',
     maxAge: 60 * 60 * 24 * 365,
     sameSite: 'lax',
     path: '/'
   })
   const mode = useState<ColorMode>('site:color-mode', () => {
     const saved = savedMode.value
-    return saved === 'dark' || saved === 'system' ? saved : 'light'
+    return saved === 'light' || saved === 'dark' ? saved : 'system'
   })
   const icon = computed(() => modes[mode.value].icon)
   const label = computed(() => `当前配色：${modes[mode.value].label}；点击切换为${modes[modes[mode.value].next].label}`)
