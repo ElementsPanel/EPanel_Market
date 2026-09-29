@@ -116,7 +116,12 @@ function formatDate(timestamp?: number) {
           <v-card class="h-100 pa-2 d-flex flex-column" hover @click="navigateTo(`/plugins/${plugin.id}`)">
             <v-card-item>
               <template #prepend>
-                <v-avatar color="primary" variant="tonal">
+                <v-avatar
+                  :color="plugin.hasIcon && !failedIcons[plugin.id] ? 'surface' : 'primary'"
+                  :variant="plugin.hasIcon && !failedIcons[plugin.id] ? 'flat' : 'tonal'"
+                  size="52"
+                  rounded="lg"
+                >
                   <!-- 包里的 icon.png；没有或取不到时仍是那块拼图 -->
                   <v-img
                     v-if="plugin.hasIcon && !failedIcons[plugin.id]"

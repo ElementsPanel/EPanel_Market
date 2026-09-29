@@ -100,7 +100,12 @@ function formatSize(bytes: number) {
       <!-- 商店式的头部：左边是插件本身，右边是唯一的主动作 -->
       <header class="detail-header">
         <div class="detail-heading">
-          <v-avatar color="primary" variant="tonal" size="64" rounded="lg">
+          <v-avatar
+            :color="data.hasIcon && !iconFailed ? 'surface' : 'primary'"
+            :variant="data.hasIcon && !iconFailed ? 'flat' : 'tonal'"
+            size="64"
+            rounded="lg"
+          >
             <v-img
               v-if="data.hasIcon && !iconFailed"
               :src="iconUrl(data.id)"
