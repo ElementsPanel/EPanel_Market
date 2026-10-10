@@ -4,10 +4,10 @@
  * 其余一律回首页。
  */
 export function safeNextPath(value: unknown): string {
-  return typeof value === 'string' && /^\/(?![/\\])/.test(value) ? value : '/'
+  return typeof value === 'string' && /^\/(?![/\\])/.test(value) && !/[\u0000-\u001f\u007f]/.test(value) ? value : '/'
 }
 
-/** 带上回跳地址的登录 / 注册页链接；回首页时不带参数。 */
-export function withNextPath(page: '/login' | '/register', next: string): string {
-  return next === '/' ? page : `${page}?next=${encodeURIComponent(next)}`
+export function authDialogLocation(view: 'login' | 'register', next: unknown = '/') {
+  const path = safeNextPath(next)
+  return { path: '/', query: { auth: view, ...(path === '/' ? {} : { next: path }) } }
 }

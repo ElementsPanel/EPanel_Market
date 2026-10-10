@@ -5,5 +5,7 @@
     <v-main>
       <slot />
     </v-main>
+
+    <AuthDialog />
   </v-app>
 </template>

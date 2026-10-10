@@ -1,17 +1,11 @@
-import type { ApiErrorCode, AuthUser, LoginBody, RegisterBody, UpdateMeBody } from '../../shared/types/auth'
-
-function errorMessage(error: unknown): string {
-  const data = (error as { data?: { message?: string } })?.data
-  return data?.message ?? (error as Error)?.message ?? '请求失败'
-}
-
-function errorCode(error: unknown): ApiErrorCode | undefined {
-  return (error as { data?: { code?: ApiErrorCode } })?.data?.code
-}
+import type { AuthUser, LoginBody, RegisterBody, UpdateMeBody } from '../../shared/types/auth'
+import { apiErrorCode, apiErrorMessage } from '../utils/apiError'
 
 export function useAuth() {
   const user = useState<AuthUser | null>('auth:user', () => null)
   const fetched = useState<boolean>('auth:fetched', () => false)
+  const loggingOut = useState<boolean>('auth:logging-out', () => false)
+  const toast = useToast()
 
   async function refresh(): Promise<void> {
     try {
@@ -22,7 +16,7 @@ export function useAuth() {
     } catch (error) {
       user.value = null
       // 应用尚未初始化：客户端直接引导到配置页
-      if (import.meta.client && errorCode(error) === 'NOT_INITIALIZED') await navigateTo('/setup')
+      if (import.meta.client && apiErrorCode(error) === 'NOT_INITIALIZED') await navigateTo('/setup')
     } finally {
       fetched.value = true
     }
@@ -36,7 +30,7 @@ export function useAuth() {
       return data.user
     } catch (error) {
       user.value = null
-      throw new Error(errorMessage(error))
+      throw new Error(apiErrorMessage(error))
     }
   }
 
@@ -48,7 +42,7 @@ export function useAuth() {
       return data.user
     } catch (error) {
       user.value = null
-      throw new Error(errorMessage(error))
+      throw new Error(apiErrorMessage(error))
     }
   }
 
@@ -64,7 +58,7 @@ export function useAuth() {
       user.value = data.user
       return data.user
     } catch (error) {
-      throw new Error(errorMessage(error))
+      throw new Error(apiErrorMessage(error))
     }
   }
 
@@ -79,7 +73,7 @@ export function useAuth() {
       user.value = data.user
       return data.user
     } catch (error) {
-      throw new Error(errorMessage(error))
+      throw new Error(apiErrorMessage(error))
     }
   }
 
@@ -89,15 +83,24 @@ export function useAuth() {
       user.value = data.user
       return data.user
     } catch (error) {
-      throw new Error(errorMessage(error))
+      throw new Error(apiErrorMessage(error))
     }
   }
 
   async function logout(): Promise<void> {
-    await $fetch('/api/auth/logout', { method: 'POST' }).catch(() => undefined)
-    user.value = null
-    await navigateTo('/login')
+    if (loggingOut.value) return
+    loggingOut.value = true
+    try {
+      await $fetch('/api/auth/logout', { method: 'POST' })
+      user.value = null
+      toast.success('已退出登录')
+      await navigateTo('/')
+    } catch (error) {
+      toast.error(apiErrorMessage(error))
+    } finally {
+      loggingOut.value = false
+    }
   }
 
-  return { user, fetched, avatarUrl, refresh, login, register, updateUser, uploadAvatar, deleteAvatar, logout, errorMessage }
+  return { user, fetched, avatarUrl, loggingOut, refresh, login, register, updateUser, uploadAvatar, deleteAvatar, logout, errorMessage: apiErrorMessage }
 }

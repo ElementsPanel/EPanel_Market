@@ -1,7 +1,8 @@
 <script setup lang="ts">
 import { useTheme } from 'vuetify'
 
-const { user, avatarUrl, logout } = useAuth()
+const { user, avatarUrl, loggingOut, logout } = useAuth()
+const { open: openAuth } = useAuthDialog()
 const theme = useTheme()
 const { icon: colorModeIcon, label: colorModeLabel, cycle: cycleColorMode } = useColorMode()
 const logoSrc = computed(() => theme.global.current.value.dark ? '/images/epanel-logo-white.svg' : '/images/epanel-logo.svg')
@@ -50,16 +51,16 @@ const logoSrc = computed(() => theme.global.current.value.dark ? '/images/epanel
               to="/console"
             />
             <v-list-item title="编辑资料" prepend-icon="mdi-account-edit" to="/account" />
-            <v-list-item title="退出登录" prepend-icon="mdi-logout" @click="logout()" />
+            <v-list-item title="退出登录" prepend-icon="mdi-logout" :disabled="loggingOut" @click="logout()" />
           </v-list>
         </v-menu>
       </template>
 
       <template v-else>
-        <v-btn variant="text" to="/login">
+        <v-btn variant="text" aria-haspopup="dialog" @click="openAuth('login')">
           登录
         </v-btn>
-        <v-btn variant="outlined" to="/register">
+        <v-btn variant="outlined" aria-haspopup="dialog" @click="openAuth('register')">
           注册
         </v-btn>
       </template>

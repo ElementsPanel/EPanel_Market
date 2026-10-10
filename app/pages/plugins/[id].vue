@@ -1,8 +1,10 @@
 <script setup lang="ts">
 import type { PluginSide, PublishedPluginDetail } from '../../../shared/types/plugins'
 import { pluginSideLabel } from '../../utils/pluginSides'
+import { apiErrorMessage } from '../../utils/apiError'
 
 const route = useRoute()
+const toast = useToast()
 const id = computed(() => String(route.params.id ?? ''))
 
 // 详情页恒定展示最新版，不再从 URL 读 version——版本列表只列出历史，切换版本要走
@@ -10,6 +12,12 @@ const id = computed(() => String(route.params.id ?? ''))
 const { data, status, error, refresh } = await useFetch<PublishedPluginDetail>(
   () => `/api/plugins/${encodeURIComponent(id.value)}`
 )
+
+if (import.meta.client) {
+  watch(error, (cause) => {
+    if (cause) toast.error(apiErrorMessage(cause))
+  }, { immediate: true })
+}
 
 const tab = ref<'readme' | 'versions' | 'updates'>('readme')
 
@@ -59,11 +67,6 @@ const headerTargets = computed(() =>
   data.value ? targetsFor(data.value.selectedVersion) : []
 )
 
-const errorMessage = computed(() => {
-  const payload = error.value?.data as { data?: { message?: string } } | undefined
-  return payload?.data?.message || error.value?.message
-})
-
 useSeoMeta({
   title: () => (data.value ? `${data.value.displayName} · 插件市场` : '插件详情'),
   description: () => data.value?.summary || '查看插件说明、版本历史与更新内容',
@@ -94,7 +97,11 @@ function formatSize(bytes: number) {
     </div>
 
     <v-progress-linear v-if="status === 'pending'" indeterminate class="mb-4" />
-    <v-alert v-if="error" type="error" class="mb-4" :text="errorMessage" />
+    <v-card v-else-if="error && !data" class="text-center mb-4 py-10">
+      <v-icon icon="mdi-cloud-off-outline" size="48" class="text-medium-emphasis" />
+      <div class="text-h6 mt-4">暂时无法加载插件详情</div>
+      <v-btn variant="text" class="mt-4" @click="refresh()">重试</v-btn>
+    </v-card>
 
     <template v-if="data">
       <!-- 商店式的头部：左边是插件本身，右边是唯一的主动作 -->

@@ -1,7 +1,9 @@
 <script setup lang="ts">
 import type { PluginListResult } from '../../shared/types/plugins'
+import { apiErrorMessage } from '../utils/apiError'
 
 const route = useRoute()
+const toast = useToast()
 
 const keyword = ref(typeof route.query.q === 'string' ? route.query.q : '')
 const category = ref(typeof route.query.category === 'string' ? route.query.category : '')
@@ -21,6 +23,12 @@ const { data, status, error, refresh } = await useFetch<PluginListResult>('/api/
   query,
   watch: [query],
 })
+
+if (import.meta.client) {
+  watch(error, (cause) => {
+    if (cause) toast.error(apiErrorMessage(cause))
+  }, { immediate: true })
+}
 
 const result = computed(() => data.value)
 const items = computed(() => result.value?.items ?? [])
@@ -104,9 +112,13 @@ function formatDate(timestamp?: number) {
       </v-col>
     </v-row>
 
-    <v-alert v-if="error" type="error" class="my-4" :text="error.message" />
+    <v-progress-linear v-if="status === 'pending'" indeterminate class="my-4" />
 
-    <v-progress-linear v-else-if="status === 'pending'" indeterminate class="my-4" />
+    <v-card v-else-if="error" class="text-center my-4 py-10">
+      <v-icon icon="mdi-cloud-off-outline" size="48" class="text-medium-emphasis" />
+      <div class="text-h6 mt-4">暂时无法加载插件</div>
+      <v-btn variant="text" class="mt-4" @click="refresh()">重试</v-btn>
+    </v-card>
 
     <template v-else-if="items.length">
       <v-row>

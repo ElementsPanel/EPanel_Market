@@ -5,6 +5,7 @@ import { AVATAR_MAX_BYTES, AVATAR_MIME_TYPES } from '../../shared/utils/avatar'
 definePageMeta({ middleware: 'auth' })
 
 const { user, avatarUrl, updateUser, uploadAvatar, deleteAvatar, errorMessage } = useAuth()
+const toast = useToast()
 
 const accept = AVATAR_MIME_TYPES.join(',')
 const maxMb = AVATAR_MAX_BYTES / 1024 / 1024
@@ -27,14 +28,11 @@ watch(user, (current) => {
 const emailChanged = computed(() => !!user.value && email.value.trim().toLowerCase() !== user.value.email)
 
 const profileSaving = ref(false)
-const profileError = ref('')
-const profileSaved = ref(false)
 
 async function submitProfile() {
-  profileError.value = ''
-  profileSaved.value = false
+  if (profileSaving.value) return
   if (!displayName.value.trim()) {
-    profileError.value = '请填写显示名称'
+    toast.error('请填写显示名称')
     return
   }
 
@@ -46,9 +44,9 @@ async function submitProfile() {
       currentPassword: emailChanged.value ? currentPassword.value : undefined,
     })
     currentPassword.value = ''
-    profileSaved.value = true
+    toast.success('资料已更新')
   } catch (error) {
-    profileError.value = (error as Error).message
+    toast.error(errorMessage(error))
   } finally {
     profileSaving.value = false
   }
@@ -58,14 +56,11 @@ const oldPassword = ref('')
 const newPassword = ref('')
 const confirmPassword = ref('')
 const passwordSaving = ref(false)
-const passwordError = ref('')
-const passwordSaved = ref(false)
 
 async function submitPassword() {
-  passwordError.value = ''
-  passwordSaved.value = false
+  if (passwordSaving.value) return
   if (newPassword.value !== confirmPassword.value) {
-    passwordError.value = '两次输入的新密码不一致'
+    toast.error('两次输入的新密码不一致')
     return
   }
 
@@ -75,9 +70,9 @@ async function submitPassword() {
     oldPassword.value = ''
     newPassword.value = ''
     confirmPassword.value = ''
-    passwordSaved.value = true
+    toast.success('密码已更新，其他设备上的登录状态已失效')
   } catch (error) {
-    passwordError.value = (error as Error).message
+    toast.error(errorMessage(error))
   } finally {
     passwordSaving.value = false
   }
@@ -86,20 +81,17 @@ async function submitPassword() {
 // VFileInput 在单选模式下给出单个 File
 const avatarFile = ref<File | null>(null)
 const avatarBusy = ref(false)
-const avatarError = ref('')
-const avatarSaved = ref(false)
 
 async function submitAvatar() {
-  avatarError.value = ''
-  avatarSaved.value = false
+  if (avatarBusy.value) return
 
   const file = avatarFile.value
   if (!file) {
-    avatarError.value = '请先选择一张图片'
+    toast.error('请先选择一张图片')
     return
   }
   if (file.size > AVATAR_MAX_BYTES) {
-    avatarError.value = `图片不能超过 ${maxMb}MB`
+    toast.error(`图片不能超过 ${maxMb}MB`)
     return
   }
 
@@ -107,25 +99,24 @@ async function submitAvatar() {
   try {
     await uploadAvatar(file)
     avatarFile.value = null
-    avatarSaved.value = true
+    toast.success('头像已更新')
   } catch (error) {
-    avatarError.value = (error as Error).message
+    toast.error(errorMessage(error))
   } finally {
     avatarBusy.value = false
   }
 }
 
 async function removeAvatar() {
-  avatarError.value = ''
-  avatarSaved.value = false
+  if (avatarBusy.value) return
 
   avatarBusy.value = true
   try {
     await deleteAvatar()
     avatarFile.value = null
-    avatarSaved.value = true
+    toast.success('头像已删除')
   } catch (error) {
-    avatarError.value = (error as Error).message
+    toast.error(errorMessage(error))
   } finally {
     avatarBusy.value = false
   }
@@ -135,29 +126,31 @@ async function removeAvatar() {
 const tokens = ref<ApiTokenSummary[]>([])
 // 服务端渲染时还没请求过，先当作在加载：否则有令牌的人会先看到一句「还没有签发过」。
 const tokensLoading = ref(true)
-const tokensError = ref('')
+const tokensFailed = ref(false)
 const revokingToken = ref('')
 
 async function loadTokens() {
   tokensLoading.value = true
-  tokensError.value = ''
+  tokensFailed.value = false
   try {
     tokens.value = (await $fetch<{ items: ApiTokenSummary[] }>('/api/account/tokens')).items
   } catch (error) {
-    tokensError.value = errorMessage(error)
+    tokensFailed.value = true
+    toast.error(errorMessage(error))
   } finally {
     tokensLoading.value = false
   }
 }
 
 async function revokeToken(token: ApiTokenSummary) {
-  tokensError.value = ''
+  if (revokingToken.value) return
   revokingToken.value = token.id
   try {
     await $fetch(`/api/account/tokens/${encodeURIComponent(token.id)}`, { method: 'DELETE' })
     tokens.value = tokens.value.filter(item => item.id !== token.id)
+    toast.success('发布令牌已撤销')
   } catch (error) {
-    tokensError.value = errorMessage(error)
+    toast.error(errorMessage(error))
   } finally {
     revokingToken.value = ''
   }
@@ -193,20 +186,18 @@ onMounted(loadTokens)
               v-model="avatarFile"
               class="mt-4"
               :accept="accept"
+              :disabled="avatarBusy"
               label="选择图片"
               prepend-icon=""
               :hint="`支持 PNG / JPEG / WebP，最大 ${maxMb}MB`"
               persistent-hint
             />
-
-            <v-alert v-if="avatarError" type="error" class="mt-4" :text="avatarError" />
-            <v-alert v-else-if="avatarSaved" type="success" class="mt-4" text="头像已更新" />
           </v-card-text>
 
           <v-card-actions>
             <v-btn
               variant="text"
-              :disabled="!user?.avatarVersion"
+              :disabled="avatarBusy || !user?.avatarVersion"
               :loading="avatarBusy"
               @click="removeAvatar"
             >
@@ -215,7 +206,7 @@ onMounted(loadTokens)
             <v-spacer />
             <v-btn
               color="primary"
-              :disabled="!avatarFile"
+              :disabled="avatarBusy || !avatarFile"
               :loading="avatarBusy"
               @click="submitAvatar"
             >
@@ -243,9 +234,6 @@ onMounted(loadTokens)
               persistent-hint
               @keydown.enter="submitProfile"
             />
-
-            <v-alert v-if="profileError" type="error" class="mt-4" :text="profileError" />
-            <v-alert v-else-if="profileSaved" type="success" class="mt-4" text="资料已更新" />
           </v-card-text>
 
           <v-card-actions>
@@ -270,14 +258,6 @@ onMounted(loadTokens)
               type="password"
               @keydown.enter="submitPassword"
             />
-
-            <v-alert v-if="passwordError" type="error" class="mt-4" :text="passwordError" />
-            <v-alert
-              v-else-if="passwordSaved"
-              type="success"
-              class="mt-4"
-              text="密码已更新，其他设备上的登录状态已失效"
-            />
           </v-card-text>
 
           <v-card-actions>
@@ -297,8 +277,11 @@ onMounted(loadTokens)
           </v-card-subtitle>
 
           <v-card-text>
-            <v-alert v-if="tokensError" type="error" class="mb-4" :text="tokensError" />
             <v-progress-linear v-if="tokensLoading" indeterminate class="mb-2" />
+            <div v-else-if="tokensFailed" class="d-flex align-center justify-space-between ga-2">
+              <span class="text-body-2 text-medium-emphasis">暂时无法加载发布令牌</span>
+              <v-btn variant="text" size="small" @click="loadTokens">重试</v-btn>
+            </div>
             <div v-else-if="!tokens.length" class="text-body-2 text-medium-emphasis">
               还没有签发过发布令牌
             </div>

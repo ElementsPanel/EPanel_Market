@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import type { DbDriver, SetupPayload } from '../../shared/types/setup'
+import { apiErrorMessage } from '../utils/apiError'
 
 definePageMeta({ layout: 'blank' })
 
@@ -21,20 +22,24 @@ const admin = reactive({
 })
 
 const loading = ref(false)
-const errorMessage = ref('')
+const toast = useToast()
 
 const { refresh } = useAuth()
 
 onMounted(async () => {
-  const status = await $fetch<{ initialized: boolean }>('/api/setup/status')
-  if (status.initialized) await navigateTo('/')
+  try {
+    const status = await $fetch<{ initialized: boolean }>('/api/setup/status')
+    if (status.initialized) await navigateTo('/')
+  } catch (error) {
+    toast.error(apiErrorMessage(error))
+  }
 })
 
 async function submit() {
-  errorMessage.value = ''
+  if (loading.value) return
 
   if (admin.password !== admin.confirm) {
-    errorMessage.value = '两次输入的密码不一致'
+    toast.error('两次输入的密码不一致')
     return
   }
 
@@ -52,10 +57,10 @@ async function submit() {
 
     await $fetch('/api/setup/initialize', { method: 'POST', body })
     await refresh()
-    window.location.href = '/'
+    toast.success('初始化成功')
+    await navigateTo('/', { replace: true })
   } catch (error: unknown) {
-    const data = (error as { data?: { message?: string } })?.data
-    errorMessage.value = data?.message ?? (error as Error)?.message ?? '初始化失败'
+    toast.error(apiErrorMessage(error, '初始化失败'))
   } finally {
     loading.value = false
   }
@@ -130,8 +135,6 @@ async function submit() {
             <v-text-field v-model="admin.displayName" label="显示名称（可选）" />
             <v-text-field v-model="admin.password" label="密码" type="password" />
             <v-text-field v-model="admin.confirm" label="确认密码" type="password" />
-
-            <v-alert v-if="errorMessage" type="error" class="mt-4" :text="errorMessage" />
           </v-card-text>
 
           <v-card-actions>

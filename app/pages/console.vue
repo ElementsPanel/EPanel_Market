@@ -5,6 +5,7 @@ import type {
   ConsoleUserItem,
 } from '../../shared/types/console'
 import type { PluginVersionStatus } from '../../shared/types/plugins'
+import { apiErrorMessage } from '../utils/apiError'
 
 definePageMeta({ middleware: 'admin' })
 
@@ -12,7 +13,9 @@ type TabKey = 'review' | 'plugins' | 'users'
 
 const tab = ref<TabKey>('review')
 const loading = ref(false)
-const errorMessage = ref('')
+const loadFailed = ref(false)
+const toast = useToast()
+let loadSequence = 0
 
 const reviewItems = ref<ConsoleReviewItem[]>([])
 const pluginItems = ref<ConsolePluginItem[]>([])
@@ -28,10 +31,6 @@ const STATUS_COLOR: Record<PluginVersionStatus, string> = {
   pending: 'warning',
   approved: 'success',
   rejected: 'error',
-}
-
-function messageOf(error: unknown): string {
-  return (error as { data?: { message?: string } })?.data?.message ?? (error as Error).message
 }
 
 function formatDate(timestamp?: number) {
@@ -62,8 +61,9 @@ function sessionHeaders() {
 }
 
 async function load(key: TabKey) {
+  const sequence = ++loadSequence
   loading.value = true
-  errorMessage.value = ''
+  loadFailed.value = false
   try {
     if (key === 'review') {
       const data = await $fetch<{ items: ConsoleReviewItem[] }>('/api/console/review', {
@@ -82,29 +82,32 @@ async function load(key: TabKey) {
       userItems.value = data.items
     }
   } catch (error) {
-    errorMessage.value = messageOf(error)
+    if (sequence !== loadSequence) return
+    loadFailed.value = true
+    if (import.meta.client) toast.error(apiErrorMessage(error))
   } finally {
-    loading.value = false
+    if (sequence === loadSequence) loading.value = false
   }
 }
 
 const acting = ref('')
 
-async function run(id: string, task: () => Promise<unknown>) {
+async function run(id: string, successMessage: string, task: () => Promise<unknown>) {
+  if (acting.value) return
   acting.value = id
-  errorMessage.value = ''
   try {
     await task()
+    toast.success(successMessage)
     await load(tab.value)
   } catch (error) {
-    errorMessage.value = messageOf(error)
+    toast.error(apiErrorMessage(error))
   } finally {
     acting.value = ''
   }
 }
 
 function approve(item: ConsoleReviewItem) {
-  return run(item.versionId, () =>
+  return run(item.versionId, '插件版本已通过审核', () =>
     $fetch(`/api/console/review/${item.versionId}`, {
       method: 'POST',
       headers: sessionHeaders(),
@@ -134,9 +137,12 @@ function confirmReject() {
   const item = rejectTarget.value
   if (!item) return
   const note = rejectNote.value.trim()
-  if (!note) return
+  if (!note) {
+    toast.error('请填写驳回理由')
+    return
+  }
   rejectTarget.value = null
-  return run(item.versionId, () =>
+  return run(item.versionId, '插件版本已驳回', () =>
     $fetch(`/api/console/review/${item.versionId}`, {
       method: 'POST',
       headers: sessionHeaders(),
@@ -146,7 +152,7 @@ function confirmReject() {
 }
 
 function toggleVisibility(item: ConsolePluginItem) {
-  return run(item.id, () =>
+  return run(item.id, item.visibility === 'listed' ? '插件已下架' : '插件已上架', () =>
     $fetch(`/api/console/plugins/${item.id}`, {
       method: 'PATCH',
       headers: sessionHeaders(),
@@ -173,11 +179,13 @@ function confirmDelete() {
   if (!target) return
   deleteTarget.value = null
   const url = target.kind === 'plugin' ? `/api/console/plugins/${target.id}` : `/api/console/users/${target.id}`
-  return run(target.id, () => $fetch(url, { method: 'DELETE', headers: sessionHeaders() }))
+  return run(target.id, target.kind === 'plugin' ? '插件已删除' : '用户已删除', () =>
+    $fetch(url, { method: 'DELETE', headers: sessionHeaders() })
+  )
 }
 
 function toggleAdmin(item: ConsoleUserItem) {
-  return run(item.id, () =>
+  return run(item.id, item.isAdmin ? '已取消管理员权限' : '已授予管理员权限', () =>
     $fetch(`/api/console/users/${item.id}`, {
       method: 'PATCH',
       headers: sessionHeaders(),
@@ -196,8 +204,6 @@ watch(tab, (key) => load(key))
       控制台
     </div>
 
-    <v-alert v-if="errorMessage" type="error" class="mb-4" :text="errorMessage" />
-
     <v-tabs v-model="tab" color="primary" show-arrows>
       <v-tab value="review">
         审核队列
@@ -212,7 +218,12 @@ watch(tab, (key) => load(key))
 
     <v-progress-linear v-if="loading" indeterminate class="mt-2" />
 
-    <v-tabs-window v-model="tab" class="mt-4">
+    <v-card v-if="loadFailed && !loading" class="text-center mt-4 py-8">
+      <div class="text-body-2 text-medium-emphasis mb-4">暂时无法加载列表</div>
+      <v-btn variant="text" @click="load(tab)">重试</v-btn>
+    </v-card>
+
+    <v-tabs-window v-if="!loadFailed" v-model="tab" class="mt-4">
       <v-tabs-window-item value="review">
         <v-card v-if="!reviewItems.length && !loading">
           <v-card-text class="text-center text-medium-emphasis py-8">
@@ -258,6 +269,7 @@ watch(tab, (key) => load(key))
                   color="success"
                   variant="tonal"
                   :loading="acting === item.versionId"
+                  :disabled="Boolean(acting)"
                   @click="approve(item)"
                 >
                   通过
@@ -267,7 +279,7 @@ watch(tab, (key) => load(key))
                   color="error"
                   variant="text"
                   class="ml-2"
-                  :disabled="acting === item.versionId"
+                  :disabled="Boolean(acting)"
                   @click="openReject(item)"
                 >
                   驳回
@@ -329,6 +341,7 @@ watch(tab, (key) => load(key))
                   size="small"
                   variant="tonal"
                   :loading="acting === item.id"
+                  :disabled="Boolean(acting)"
                   @click="toggleVisibility(item)"
                 >
                   {{ item.visibility === 'listed' ? '下架' : '上架' }}
@@ -338,7 +351,7 @@ watch(tab, (key) => load(key))
                   color="error"
                   variant="text"
                   class="ml-2"
-                  :disabled="acting === item.id"
+                  :disabled="Boolean(acting)"
                   @click="openDelete('plugin', item.id, item.displayName)"
                 >
                   删除
@@ -380,6 +393,7 @@ watch(tab, (key) => load(key))
                   hide-details
                   density="compact"
                   :loading="acting === item.id"
+                  :disabled="Boolean(acting)"
                   @update:model-value="toggleAdmin(item)"
                 />
               </td>
@@ -388,7 +402,7 @@ watch(tab, (key) => load(key))
                   size="small"
                   color="error"
                   variant="text"
-                  :disabled="item.isAdmin || acting === item.id"
+                  :disabled="item.isAdmin || Boolean(acting)"
                   @click="openDelete('user', item.id, item.displayName)"
                 >
                   删除
