@@ -7,6 +7,7 @@ const toast = useToast()
 const origin = useRequestURL().origin
 const saved = ref<SiteSettingsView | null>(null)
 const settings = ref<SiteSettings>(createDefaultSiteSettings())
+const form = ref<{ validate: () => Promise<{ valid: boolean }> } | null>(null)
 const loading = ref(true)
 const saving = ref(false)
 const testing = ref(false)
@@ -17,6 +18,7 @@ function applySettings(value: SiteSettingsView) {
   settings.value = {
     siteUrl: value.siteUrl || origin,
     mail: { ...value.mail, apiKey: '', smtpPassword: '' },
+    captcha: { ...value.captcha, secretKey: '' },
   }
 }
 
@@ -33,10 +35,11 @@ async function load() {
 
 async function save() {
   if (busy.value) return
+  if (!(await form.value?.validate())?.valid || busy.value) return
   saving.value = true
   try {
     applySettings(await $fetch<SiteSettingsView>('/api/console/settings', { method: 'PUT', body: settings.value, retry: 0 }))
-    toast.success('邮件设置已保存并生效')
+    toast.success('站点设置已保存并生效')
   } catch (error) {
     toast.error(apiErrorMessage(error))
   } finally {
@@ -48,7 +51,11 @@ async function testEmail() {
   if (busy.value) return
   testing.value = true
   try {
-    const result = await $fetch<{ message: string }>('/api/console/settings/test-email', { method: 'POST', body: settings.value, retry: 0 })
+    const result = await $fetch<{ message: string }>('/api/console/settings/test-email', {
+      method: 'POST',
+      body: { siteUrl: settings.value.siteUrl, mail: settings.value.mail },
+      retry: 0,
+    })
     toast.success(result.message)
   } catch (error) {
     toast.error(apiErrorMessage(error))
@@ -64,11 +71,11 @@ onMounted(load)
   <div class="site-settings">
     <v-progress-linear v-if="loading" indeterminate />
     <v-card v-else-if="!saved" class="text-center py-8">
-      <div class="text-body-2 text-medium-emphasis mb-4">暂时无法加载邮件设置</div>
+      <div class="text-body-2 text-medium-emphasis mb-4">暂时无法加载站点设置</div>
       <v-btn variant="text" @click="load">重试</v-btn>
     </v-card>
 
-    <v-form v-else :disabled="busy" @submit.prevent="save">
+    <v-form v-else ref="form" :disabled="busy" @submit.prevent="save">
       <v-card class="mb-4">
         <v-card-title class="text-h6">站点地址</v-card-title>
         <v-card-text>
@@ -76,7 +83,7 @@ onMounted(load)
             v-model="settings.siteUrl"
             label="站点对外地址"
             placeholder="https://market.example.com"
-            hint="用于邮件中的邮箱验证链接，请填写用户能够访问的完整站点地址。"
+            hint="用于邮箱验证链接和验证码域名校验，请填写用户能够访问的完整站点地址。"
             persistent-hint
             maxlength="2048"
             required
@@ -89,6 +96,13 @@ onMounted(load)
         <v-card-text>
           <p class="text-body-2 text-medium-emphasis mb-4">配置邮件服务后，访客可通过验证邮箱完成注册。已保存的密码与密钥不会显示，连接设置不变时可留空保留。</p>
           <MailSettingsForm v-model="settings.mail" :saved="saved.mail" :disabled="busy" />
+        </v-card-text>
+      </v-card>
+
+      <v-card class="mb-4">
+        <v-card-title class="text-h6">登录和注册人机验证</v-card-title>
+        <v-card-text>
+          <CaptchaSettingsForm v-model="settings.captcha" :saved="saved.captcha" :disabled="busy" />
         </v-card-text>
       </v-card>
 

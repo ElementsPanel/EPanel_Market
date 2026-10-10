@@ -1,6 +1,7 @@
 import type { RegisterBody } from '../../../shared/types/auth'
 import { createUser, findUserByEmail } from '../../services/users'
 import { sendUserVerification } from '../../services/email-verification'
+import { verifyAuthCaptcha } from '../../utils/captcha'
 import { appError } from '../../utils/errors'
 import { verifyPassword } from '../../utils/password'
 import { enforceMailRateLimit } from '../../utils/rate-limit'
@@ -13,6 +14,7 @@ export default defineEventHandler(async (event) => {
   const password = requirePassword(body.password)
   if (email.length > 254) throw appError(400, 'VALIDATION_ERROR', '邮箱地址不能超过 254 个字符')
   if (password.length > 128) throw appError(400, 'VALIDATION_ERROR', '密码不能超过 128 位')
+  await verifyAuthCaptcha(email, body.captcha, 'register')
   requireMailSettings()
   enforceMailRateLimit(event, email)
 

@@ -2,7 +2,9 @@
 import { useTheme } from 'vuetify'
 
 const { user, avatarUrl, loggingOut, logout } = useAuth()
-const { open: openAuth } = useAuthDialog()
+const { view: authView, open: openAuth } = useAuthDialog()
+const route = useRoute()
+const consoleActive = computed(() => route.path === '/console' || route.path.startsWith('/console/'))
 const theme = useTheme()
 const { icon: colorModeIcon, label: colorModeLabel, cycle: cycleColorMode } = useColorMode()
 const logoSrc = computed(() => theme.global.current.value.dark ? '/images/epanel-logo-white.svg' : '/images/epanel-logo.svg')
@@ -29,7 +31,12 @@ const logoSrc = computed(() => theme.global.current.value.dark ? '/images/epanel
 
     <template #append>
       <template v-if="user?.isAdmin">
-        <v-btn variant="text" to="/console">
+        <v-btn
+          variant="text"
+          to="/console"
+          :active="consoleActive"
+          :prepend-icon="consoleActive ? 'mdi-view-dashboard' : 'mdi-view-dashboard-outline'"
+        >
           控制台
         </v-btn>
       </template>
@@ -37,7 +44,7 @@ const logoSrc = computed(() => theme.global.current.value.dark ? '/images/epanel
       <template v-if="user">
         <v-menu location="bottom end">
           <template #activator="{ props }">
-            <v-btn v-bind="props" variant="text">
+            <v-btn v-bind="props" variant="text" :aria-label="`${user.displayName} 的账号菜单`">
               <UserAvatar :src="avatarUrl" :name="user.displayName" :size="28" />
             </v-btn>
           </template>
@@ -57,10 +64,22 @@ const logoSrc = computed(() => theme.global.current.value.dark ? '/images/epanel
       </template>
 
       <template v-else>
-        <v-btn variant="text" aria-haspopup="dialog" @click="openAuth('login')">
+        <v-btn
+          variant="text"
+          :active="authView === 'login'"
+          :prepend-icon="authView === 'login' ? 'mdi-account-arrow-right' : 'mdi-account-arrow-right-outline'"
+          aria-haspopup="dialog"
+          @click="openAuth('login')"
+        >
           登录
         </v-btn>
-        <v-btn variant="outlined" aria-haspopup="dialog" @click="openAuth('register')">
+        <v-btn
+          variant="text"
+          :active="authView === 'register'"
+          :prepend-icon="authView === 'register' ? 'mdi-account-plus' : 'mdi-account-plus-outline'"
+          aria-haspopup="dialog"
+          @click="openAuth('register')"
+        >
           注册
         </v-btn>
       </template>
@@ -78,7 +97,7 @@ const logoSrc = computed(() => theme.global.current.value.dark ? '/images/epanel
 }
 
 .app-header :deep(.v-toolbar__append) {
-  gap: 12px;
+  gap: 8px;
 }
 
 .app-header__brand {

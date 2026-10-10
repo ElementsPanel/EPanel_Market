@@ -220,7 +220,7 @@ watch(tab, (key) => load(key))
         用户管理
       </v-tab>
       <v-tab value="settings">
-        邮件设置
+        站点设置
       </v-tab>
     </v-tabs>
 

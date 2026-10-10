@@ -38,6 +38,14 @@ CREATE TABLE IF NOT EXISTS email_verification_tokens (
 );
 CREATE INDEX IF NOT EXISTS idx_email_verification_user ON email_verification_tokens(user_id);
 CREATE INDEX IF NOT EXISTS idx_email_verification_expires ON email_verification_tokens(expires_at);
+CREATE TABLE IF NOT EXISTS auth_captcha_challenges (
+  request_hash TEXT PRIMARY KEY,
+  email_hash TEXT NOT NULL,
+  settings_hash TEXT NOT NULL,
+  expires_at INTEGER NOT NULL,
+  consumed_at INTEGER
+);
+CREATE INDEX IF NOT EXISTS idx_auth_captcha_expires ON auth_captcha_challenges(expires_at);
 CREATE TABLE IF NOT EXISTS plugins (
   id           TEXT    PRIMARY KEY,
   name         TEXT    NOT NULL,
@@ -126,6 +134,14 @@ CREATE TABLE IF NOT EXISTS email_verification_tokens (
 );
 CREATE INDEX IF NOT EXISTS idx_email_verification_user ON email_verification_tokens(user_id);
 CREATE INDEX IF NOT EXISTS idx_email_verification_expires ON email_verification_tokens(expires_at);
+CREATE TABLE IF NOT EXISTS auth_captcha_challenges (
+  request_hash TEXT PRIMARY KEY,
+  email_hash TEXT NOT NULL,
+  settings_hash TEXT NOT NULL,
+  expires_at BIGINT NOT NULL,
+  consumed_at BIGINT
+);
+CREATE INDEX IF NOT EXISTS idx_auth_captcha_expires ON auth_captcha_challenges(expires_at);
 CREATE TABLE IF NOT EXISTS plugins (
   id           TEXT    PRIMARY KEY,
   name         TEXT    NOT NULL,

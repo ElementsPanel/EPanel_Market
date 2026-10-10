@@ -1,6 +1,9 @@
 <script setup lang="ts">
+import type { RegisterBody } from '../../shared/types/auth'
+import type { CaptchaAction } from '../../shared/types/captcha'
 import type { AuthView } from '../composables/useAuthDialog'
-import { apiErrorCode, apiErrorMessage } from '../utils/apiError'
+import { useAuthCaptcha } from '../composables/useAuthCaptcha'
+import { apiErrorMessage } from '../utils/apiError'
 
 const route = useRoute()
 const { view, open, close, complete } = useAuthDialog()
@@ -12,18 +15,32 @@ const email = ref('')
 const displayName = ref('')
 const password = ref('')
 const confirmPassword = ref('')
-const loading = ref(false)
 const resending = ref(false)
-const busy = computed(() => loading.value || resending.value)
 const registrationSent = ref(false)
 const needsVerification = ref(false)
 const resendSeconds = ref(0)
+const submitButton = ref<{ $el: HTMLButtonElement } | null>(null)
 let resendTimer: ReturnType<typeof setInterval> | undefined
 let returnFocus: HTMLElement | null = null
 
+const {
+  step, loading, challenge, captchaError,
+  authenticate, prepareCaptcha, completeCaptcha, onCaptchaError, cancelChallenge, cancelAttempt,
+} = useAuthCaptcha({
+  active: () => Boolean(view.value),
+  submit: submitCredentials,
+  onCancel: () => submitButton.value?.$el.focus(),
+  onError: (code) => {
+    if (view.value === 'login') needsVerification.value = code === 'EMAIL_NOT_VERIFIED'
+  },
+})
+const busy = computed(() => loading.value || resending.value)
+const captchaActive = computed(() => Boolean(challenge.value))
 const isRegister = computed(() => shownView.value === 'register')
 const title = computed(() => isRegister.value ? '注册' : '登录')
 const subtitle = computed(() => isRegister.value ? '创建账号后需要验证邮箱' : '使用邮箱与密码登录')
+
+watch(() => route.fullPath, cancelAttempt, { flush: 'sync' })
 
 watch(view, (value, previous) => {
   password.value = ''
@@ -102,7 +119,7 @@ async function submit() {
   needsVerification.value = false
 
   const address = email.value.trim()
-  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(address)) {
+  if (address.length > 254 || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(address)) {
     toast.error('请填写有效的邮箱地址')
     return
   }
@@ -119,34 +136,31 @@ async function submit() {
     return
   }
 
-  const registering = isRegister.value
+  await authenticate(isRegister.value ? 'register' : 'login', {
+    email: address,
+    password: password.value,
+    ...(isRegister.value ? { displayName: displayName.value.trim() || undefined } : {}),
+  })
+}
+
+async function submitCredentials(action: CaptchaAction, body: RegisterBody, signal: AbortSignal) {
   const requestPath = route.fullPath
-  loading.value = true
-  try {
-    if (registering) {
-      const result = await register({
-        email: address,
-        password: password.value,
-        displayName: displayName.value.trim() || undefined,
-      })
-      toast.success(result.message)
-      if (route.fullPath === requestPath) {
-        email.value = address
-        registrationSent.value = true
-        startResendTimer()
-      }
-    } else {
-      await login({ email: address, password: password.value })
-      toast.success('登录成功')
-      if (route.fullPath === requestPath) await complete()
-    }
+  if (action === 'register') {
+    const result = await register(body, { signal })
+    if (signal.aborted || route.fullPath !== requestPath) return
     password.value = ''
     confirmPassword.value = ''
-  } catch (error) {
-    toast.error(apiErrorMessage(error))
-    if (!registering && route.fullPath === requestPath) needsVerification.value = apiErrorCode(error) === 'EMAIL_NOT_VERIFIED'
-  } finally {
-    loading.value = false
+    email.value = body.email
+    registrationSent.value = true
+    startResendTimer()
+    toast.success(result.message)
+  } else {
+    await login(body, { signal })
+    if (signal.aborted || route.fullPath !== requestPath) return
+    password.value = ''
+    confirmPassword.value = ''
+    toast.success('登录成功')
+    await complete()
   }
 }
 </script>
@@ -159,13 +173,23 @@ async function submit() {
     :scrim="true"
     :scrollable="false"
     :persistent="busy"
+    :retain-focus="!captchaActive"
+    :capture-focus="!captchaActive"
     :close-on-back="false"
     aria-labelledby="auth-dialog-title"
     aria-describedby="auth-dialog-description"
     @update:model-value="onModelValue"
     @after-leave="onAfterLeave"
   >
-    <v-card v-if="shownView" max-width="440" width="100%" class="auth-dialog__card">
+    <v-card
+      v-if="shownView"
+      max-width="440"
+      width="100%"
+      class="auth-dialog__card"
+      :class="{ 'auth-dialog__card--receded': captchaActive }"
+      :inert="captchaActive || undefined"
+      :aria-hidden="captchaActive || undefined"
+    >
       <v-card-item>
         <v-card-title id="auth-dialog-title" tag="h2" class="text-h5">{{ title }}</v-card-title>
         <v-card-subtitle id="auth-dialog-description">{{ subtitle }}</v-card-subtitle>
@@ -194,7 +218,7 @@ async function submit() {
             type="email"
             autocomplete="email"
             prepend-inner-icon="mdi-email"
-            :maxlength="isRegister ? 254 : undefined"
+            maxlength="254"
             :class="{ 'mt-4': isRegister }"
             :autofocus="!isRegister"
             required
@@ -223,7 +247,7 @@ async function submit() {
             required
           />
 
-          <v-btn type="submit" color="primary" block size="large" class="mt-4" :flat="false" :loading="loading" :disabled="busy">
+          <v-btn ref="submitButton" type="submit" color="primary" block size="large" class="mt-4" :flat="false" :loading="loading" :disabled="busy">
             {{ title }}
           </v-btn>
         </v-form>
@@ -248,12 +272,36 @@ async function submit() {
       </v-card-text>
     </v-card>
   </v-dialog>
+
+  <CaptchaDialog
+    :challenge="challenge"
+    :verifying="step === 'submitting'"
+    :refreshing="step === 'preparing'"
+    :error="captchaError"
+    @verified="completeCaptcha"
+    @error="onCaptchaError"
+    @retry="prepareCaptcha"
+    @cancel="cancelChallenge"
+  />
 </template>
 
 <style scoped>
 .auth-dialog__card {
   border-radius: 24px;
   box-shadow: none;
+  transform-origin: center;
+  transition: transform 240ms cubic-bezier(0.22, 1, 0.36, 1), opacity 240ms ease;
+}
+
+.auth-dialog__card--receded {
+  transform: scale(0.94);
+  opacity: 0.8;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .auth-dialog__card {
+    transition: none;
+  }
 }
 
 @media (max-width: 599.98px) {

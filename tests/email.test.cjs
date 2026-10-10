@@ -31,7 +31,8 @@ function load(relative, overrides = {}, globals = {}) {
 const errors = {
   appError: (statusCode, code, message) => Object.assign(new Error(message), { statusCode, code }),
 }
-const defaults = load('shared/utils/mail.ts')
+const captchaDefaults = load('shared/utils/captcha.ts')
+const defaults = load('shared/utils/mail.ts', { './captcha': captchaDefaults })
 const tables = load('server/db/schema.sqlite.ts')
 const { ddlFor } = load('server/db/ddl.ts')
 const { migrateSchema } = load('server/db/migrations.ts')
@@ -45,6 +46,7 @@ function siteSettings(mail = {}) {
   return {
     siteUrl: 'https://market.example.com',
     mail: { ...defaults.createDefaultMailSettings(), from: 'Market <mail@example.com>', apiKey: 'test-api-secret', ...mail },
+    captcha: captchaDefaults.createDefaultCaptchaSettings(),
   }
 }
 
@@ -55,6 +57,7 @@ function settingsFixture(site = siteSettings()) {
     writeConfigAtomic: (next) => { config = next },
   }
   const settings = load('server/utils/settings.ts', {
+    '../../shared/utils/captcha': captchaDefaults,
     '../../shared/utils/mail': defaults,
     './errors': errors,
     './config': configService,
@@ -193,6 +196,12 @@ async function verificationFixture(t, { verified = false, configured = true } = 
   await context.execDdl(ddlFor('sqlite'))
   await migrateSchema(context)
   const { settings, configService } = settingsFixture(configured ? siteSettings() : null)
+  const captcha = load('server/utils/captcha.ts', {
+    '../../shared/utils/mail': defaults,
+    '../db/client': { getDb: async () => context },
+    './errors': errors,
+    './settings': settings,
+  })
   const users = load('server/services/users.ts', {
     '../db/client': { getDb: async () => context },
     '../utils/errors': errors,
@@ -226,6 +235,7 @@ async function verificationFixture(t, { verified = false, configured = true } = 
     return load(`server/api/auth/${name}.ts`, {
       '../../services/users': users,
       '../../services/email-verification': service,
+      '../../utils/captcha': captcha,
       '../../utils/errors': errors,
       '../../utils/password': password,
       '../../utils/rate-limit': { enforceMailRateLimit: (event, address) => rateChecks.push(address) },

@@ -1,5 +1,6 @@
 import type { LoginBody } from '../../../shared/types/auth'
 import { findUserByEmail, toAuthUser } from '../../services/users'
+import { verifyAuthCaptcha } from '../../utils/captcha'
 import { appError } from '../../utils/errors'
 import { verifyPassword } from '../../utils/password'
 import { createSession, setSessionCookie } from '../../utils/session'
@@ -9,6 +10,8 @@ export default defineEventHandler(async (event) => {
   const body = (await readBody<Partial<LoginBody>>(event)) ?? {}
   const email = requireEmail(body.email)
   const password = requirePassword(body.password)
+
+  await verifyAuthCaptcha(email, body.captcha, 'login')
 
   const user = await findUserByEmail(email)
   // 邮箱不存在与密码错误返回同一错误，避免用户枚举

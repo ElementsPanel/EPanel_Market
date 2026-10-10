@@ -22,20 +22,26 @@ export function useAuth() {
     }
   }
 
-  async function login(body: LoginBody): Promise<AuthUser> {
+  async function login(body: LoginBody, options: { signal?: AbortSignal } = {}): Promise<AuthUser> {
     try {
-      const data = await $fetch<{ user: AuthUser }>('/api/auth/login', { method: 'POST', body })
-      user.value = data.user
-      fetched.value = true
+      const data = await $fetch<{ user: AuthUser }>('/api/auth/login', {
+        method: 'POST', body, signal: options.signal, timeout: 20000, retry: 0,
+      })
+      if (!options.signal?.aborted) {
+        user.value = data.user
+        fetched.value = true
+      }
       return data.user
     } catch (error) {
-      user.value = null
+      if (!options.signal?.aborted) user.value = null
       throw error
     }
   }
 
-  async function register(body: RegisterBody): Promise<RegistrationResult> {
-    return await $fetch<RegistrationResult>('/api/auth/register', { method: 'POST', body, retry: 0 })
+  async function register(body: RegisterBody, options: { signal?: AbortSignal } = {}): Promise<RegistrationResult> {
+    return await $fetch<RegistrationResult>('/api/auth/register', {
+      method: 'POST', body, signal: options.signal, timeout: 20000, retry: 0,
+    })
   }
 
   async function resendVerification(body: LoginBody): Promise<RegistrationResult> {

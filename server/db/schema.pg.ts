@@ -48,6 +48,16 @@ export const emailVerificationTokens = pgTable('email_verification_tokens', {
   index('idx_email_verification_expires').on(table.expiresAt),
 ])
 
+export const authCaptchaChallenges = pgTable('auth_captcha_challenges', {
+  requestHash: text('request_hash').primaryKey(),
+  emailHash: text('email_hash').notNull(),
+  settingsHash: text('settings_hash').notNull(),
+  expiresAt: bigint('expires_at', { mode: 'number' }).notNull(),
+  consumedAt: bigint('consumed_at', { mode: 'number' }),
+}, table => [
+  index('idx_auth_captcha_expires').on(table.expiresAt),
+])
+
 /** 一个插件的身份。可见性由 `visibility` 决定，审核状态在 plugin_versions 上。 */
 export const plugins = pgTable('plugins', {
   id: text('id').primaryKey().$defaultFn(() => randomUUID()),

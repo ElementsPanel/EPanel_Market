@@ -1,4 +1,5 @@
 import type { MailSettings, SiteSettings } from '../types/settings'
+import { createDefaultCaptchaSettings } from './captcha'
 
 export function createDefaultMailSettings(): MailSettings {
   return {
@@ -16,7 +17,7 @@ export function createDefaultMailSettings(): MailSettings {
 }
 
 export function createDefaultSiteSettings(): SiteSettings {
-  return { siteUrl: '', mail: createDefaultMailSettings() }
+  return { siteUrl: '', mail: createDefaultMailSettings(), captcha: createDefaultCaptchaSettings() }
 }
 
 export function isValidSiteUrl(value: string): boolean {

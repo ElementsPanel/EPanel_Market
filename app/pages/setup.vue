@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import type { DbDriver, SetupPayload } from '../../shared/types/setup'
 import { apiErrorMessage } from '../utils/apiError'
-import { createDefaultMailSettings } from '../../shared/utils/mail'
+import { createDefaultSiteSettings } from '../../shared/utils/mail'
 
 definePageMeta({ layout: 'blank' })
 
@@ -23,7 +23,7 @@ const admin = reactive({
 })
 
 const loading = ref(false)
-const settings = ref({ siteUrl: useRequestURL().origin, mail: createDefaultMailSettings() })
+const settings = ref({ ...createDefaultSiteSettings(), siteUrl: useRequestURL().origin })
 const toast = useToast()
 
 const { refresh } = useAuth()

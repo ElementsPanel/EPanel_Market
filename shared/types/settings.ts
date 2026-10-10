@@ -1,3 +1,5 @@
+import type { CaptchaSettings, CaptchaSettingsView } from './captcha'
+
 export interface MailSettings {
   transport: 'api' | 'smtp'
   preset: 'resend' | 'custom'
@@ -19,9 +21,11 @@ export interface MailSettingsView extends MailSettings {
 export interface SiteSettings {
   siteUrl: string
   mail: MailSettings
+  captcha: CaptchaSettings
 }
 
 export interface SiteSettingsView {
   siteUrl: string
   mail: MailSettingsView
+  captcha: CaptchaSettingsView
 }

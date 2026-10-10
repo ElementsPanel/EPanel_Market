@@ -1,4 +1,6 @@
+import type { CaptchaSettings } from '../../shared/types/captcha'
 import type { MailSettings, SiteSettings, SiteSettingsView } from '../../shared/types/settings'
+import { CAPTCHA_PROVIDERS, createDefaultCaptchaSettings } from '../../shared/utils/captcha'
 import { createDefaultMailSettings, createDefaultSiteSettings, isValidMailSender, isValidSiteUrl } from '../../shared/utils/mail'
 import { readConfig, writeConfigAtomic } from './config'
 import { appError } from './errors'
@@ -9,6 +11,7 @@ export function getSiteSettings(): SiteSettings {
     ...createDefaultSiteSettings(),
     ...stored,
     mail: { ...createDefaultMailSettings(), ...stored?.mail },
+    captcha: { ...createDefaultCaptchaSettings(), ...stored?.captcha },
   }
 }
 
@@ -21,6 +24,11 @@ export function toSiteSettingsView(settings: SiteSettings): SiteSettingsView {
       smtpPassword: '',
       hasApiKey: Boolean(settings.mail.apiKey),
       hasSmtpPassword: Boolean(settings.mail.smtpPassword),
+    },
+    captcha: {
+      ...settings.captcha,
+      secretKey: '',
+      hasSecretKey: Boolean(settings.captcha.secretKey),
     },
   }
 }
@@ -90,6 +98,21 @@ function parseMailSettings(input: unknown, previous?: MailSettings): MailSetting
   return mail
 }
 
+function parseCaptchaSettings(input: unknown, previous?: CaptchaSettings): CaptchaSettings {
+  if (input === undefined) return previous ?? createDefaultCaptchaSettings()
+  const body = settingsObject(input)
+  const provider = CAPTCHA_PROVIDERS.find(value => value.value === body.provider)?.value
+  if (typeof body.enabled !== 'boolean' || !provider) invalid('人机验证开关或服务商无效')
+
+  const siteKey = settingsText(body.siteKey, 1024)
+  const secretKey = settingsText(body.secretKey, 4096)
+    || (previous?.provider === provider && previous.siteKey === siteKey ? previous.secretKey : '')
+
+  if (/\s/.test(siteKey) || /\s/.test(secretKey)) invalid('验证码密钥不能包含空白字符')
+  if (body.enabled && (!siteKey || !secretKey)) invalid('启用人机验证前，请填写站点密钥和服务端密钥')
+  return { enabled: body.enabled, provider, siteKey, secretKey }
+}
+
 export function parseSiteSettings(input: unknown, previous?: SiteSettings): SiteSettings {
   const body = settingsObject(input)
   const siteUrl = settingsText(body.siteUrl)
@@ -97,6 +120,7 @@ export function parseSiteSettings(input: unknown, previous?: SiteSettings): Site
   return {
     siteUrl: new URL(siteUrl).href.replace(/\/+$/, ''),
     mail: parseMailSettings(body.mail, previous?.mail),
+    captcha: parseCaptchaSettings(body.captcha, previous?.captcha),
   }
 }
 

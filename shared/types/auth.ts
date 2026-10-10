@@ -1,3 +1,5 @@
+import type { CaptchaProof } from './captcha'
+
 export interface AuthUser {
   id: string
   email: string
@@ -12,12 +14,14 @@ export interface AuthUser {
 export interface LoginBody {
   email: string
   password: string
+  captcha?: CaptchaProof
 }
 
 export interface RegisterBody {
   email: string
   password: string
   displayName?: string
+  captcha?: CaptchaProof
 }
 
 export interface RegistrationResult {
@@ -51,6 +55,9 @@ export type ApiErrorCode =
   | 'EMAIL_TAKEN'
   | 'EMAIL_NOT_VERIFIED'
   | 'INVALID_CREDENTIALS'
+  | 'CAPTCHA_REQUIRED'
+  | 'CAPTCHA_INVALID'
+  | 'CAPTCHA_UNAVAILABLE'
   | 'UNAUTHORIZED'
   | 'FORBIDDEN'
   | 'NOT_FOUND'
