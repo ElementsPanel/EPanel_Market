@@ -11,6 +11,7 @@ export default defineEventHandler(async (event) => {
     users.map(async (user) => ({
       id: user.id,
       email: user.email,
+      emailVerified: user.emailVerified,
       displayName: user.displayName,
       isAdmin: user.isAdmin,
       createdAt: user.createdAt,

@@ -3,6 +3,7 @@ import { initializeApp } from '../../db/init'
 import { appError } from '../../utils/errors'
 import { resolveDataFile } from '../../utils/paths'
 import { setSessionCookie } from '../../utils/session'
+import { parseSiteSettings } from '../../utils/settings'
 import { optionalText, requireEmail, requirePassword } from '../../utils/validation'
 
 export default defineEventHandler(async (event) => {
@@ -15,6 +16,7 @@ export default defineEventHandler(async (event) => {
 
   const payload: SetupPayload = {
     driver,
+    settings: parseSiteSettings(body.settings),
     admin: {
       email: requireEmail(body.admin?.email),
       password: requirePassword(body.admin?.password),

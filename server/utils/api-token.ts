@@ -58,13 +58,16 @@ export async function resolveApiUser(event: H3Event): Promise<UserRow | null> {
   const token = await findPresentedToken(event)
   if (!token) return null
 
+  const user = await findUserById(token.userId)
+  if (!user || user.emailVerified === false) return null
+
   const { db, tables } = await getDb()
   await db
     .update(tables.apiTokens)
     .set({ lastUsedAt: Date.now() })
     .where(eq(tables.apiTokens.id, token.id))
 
-  return await findUserById(token.userId)
+  return user
 }
 
 export async function requireApiUser(event: H3Event): Promise<UserRow> {

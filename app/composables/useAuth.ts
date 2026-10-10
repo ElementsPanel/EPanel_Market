@@ -1,4 +1,4 @@
-import type { AuthUser, LoginBody, RegisterBody, UpdateMeBody } from '../../shared/types/auth'
+import type { AuthUser, LoginBody, RegisterBody, RegistrationResult, UpdateMeBody, UpdateMeResult } from '../../shared/types/auth'
 import { apiErrorCode, apiErrorMessage } from '../utils/apiError'
 
 export function useAuth() {
@@ -30,20 +30,16 @@ export function useAuth() {
       return data.user
     } catch (error) {
       user.value = null
-      throw new Error(apiErrorMessage(error))
+      throw error
     }
   }
 
-  async function register(body: RegisterBody): Promise<AuthUser> {
-    try {
-      const data = await $fetch<{ user: AuthUser }>('/api/auth/register', { method: 'POST', body })
-      user.value = data.user
-      fetched.value = true
-      return data.user
-    } catch (error) {
-      user.value = null
-      throw new Error(apiErrorMessage(error))
-    }
+  async function register(body: RegisterBody): Promise<RegistrationResult> {
+    return await $fetch<RegistrationResult>('/api/auth/register', { method: 'POST', body, retry: 0 })
+  }
+
+  async function resendVerification(body: LoginBody): Promise<RegistrationResult> {
+    return await $fetch<RegistrationResult>('/api/auth/resend-verification', { method: 'POST', body, retry: 0 })
   }
 
   /** 头像地址后面跟上版本号，换图后必定 miss，没换则可以命中缓存 */
@@ -52,11 +48,11 @@ export function useAuth() {
     return current?.avatarVersion ? `/api/users/${current.id}/avatar?v=${current.avatarVersion}` : null
   })
 
-  async function updateUser(body: UpdateMeBody): Promise<AuthUser> {
+  async function updateUser(body: UpdateMeBody): Promise<UpdateMeResult> {
     try {
-      const data = await $fetch<{ user: AuthUser }>('/api/auth/me', { method: 'PATCH', body })
+      const data = await $fetch<UpdateMeResult>('/api/auth/me', { method: 'PATCH', body })
       user.value = data.user
-      return data.user
+      return data
     } catch (error) {
       throw new Error(apiErrorMessage(error))
     }
@@ -102,5 +98,5 @@ export function useAuth() {
     }
   }
 
-  return { user, fetched, avatarUrl, loggingOut, refresh, login, register, updateUser, uploadAvatar, deleteAvatar, logout, errorMessage: apiErrorMessage }
+  return { user, fetched, avatarUrl, loggingOut, refresh, login, register, resendVerification, updateUser, uploadAvatar, deleteAvatar, logout, errorMessage: apiErrorMessage }
 }

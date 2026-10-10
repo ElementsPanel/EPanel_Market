@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import type { DbDriver, SetupPayload } from '../../shared/types/setup'
 import { apiErrorMessage } from '../utils/apiError'
+import { createDefaultMailSettings } from '../../shared/utils/mail'
 
 definePageMeta({ layout: 'blank' })
 
@@ -22,6 +23,7 @@ const admin = reactive({
 })
 
 const loading = ref(false)
+const settings = ref({ siteUrl: useRequestURL().origin, mail: createDefaultMailSettings() })
 const toast = useToast()
 
 const { refresh } = useAuth()
@@ -52,10 +54,12 @@ async function submit() {
     }
 
     const body: SetupPayload = driver.value === 'sqlite'
-      ? { driver: 'sqlite', sqlite: { file: sqliteFile.value }, admin: account }
-      : { driver: 'postgres', postgres: { ...postgres }, admin: account }
+      ? { driver: 'sqlite', sqlite: { file: sqliteFile.value }, admin: account, settings: settings.value }
+      : { driver: 'postgres', postgres: { ...postgres }, admin: account, settings: settings.value }
 
     await $fetch('/api/setup/initialize', { method: 'POST', body })
+    settings.value.mail.apiKey = ''
+    settings.value.mail.smtpPassword = ''
     await refresh()
     toast.success('初始化成功')
     await navigateTo('/', { replace: true })
@@ -135,6 +139,22 @@ async function submit() {
             <v-text-field v-model="admin.displayName" label="显示名称（可选）" />
             <v-text-field v-model="admin.password" label="密码" type="password" />
             <v-text-field v-model="admin.confirm" label="确认密码" type="password" />
+
+            <v-divider class="my-4" />
+            <div class="text-subtitle-1 mb-2">站点与邮件</div>
+            <p class="text-body-2 text-medium-emphasis mb-4">新用户注册后需要验证邮箱。初始化创建的管理员账户可以直接登录。</p>
+            <v-text-field
+              v-model="settings.siteUrl"
+              label="站点对外地址"
+              placeholder="https://market.example.com"
+              hint="用于邮件中的邮箱验证链接。"
+              persistent-hint
+              maxlength="2048"
+              :disabled="loading"
+              class="mb-4"
+              required
+            />
+            <MailSettingsForm v-model="settings.mail" :disabled="loading" />
           </v-card-text>
 
           <v-card-actions>

@@ -38,13 +38,15 @@ async function submitProfile() {
 
   profileSaving.value = true
   try {
-    await updateUser({
+    const result = await updateUser({
       displayName: displayName.value,
       email: emailChanged.value ? email.value : undefined,
       currentPassword: emailChanged.value ? currentPassword.value : undefined,
     })
     currentPassword.value = ''
-    toast.success('资料已更新')
+    email.value = result.user.email
+    displayName.value = result.user.displayName
+    toast.success(result.pendingEmail ? `验证邮件已发送至 ${result.pendingEmail}，验证后更换邮箱` : '资料已更新')
   } catch (error) {
     toast.error(errorMessage(error))
   } finally {
@@ -230,7 +232,7 @@ onMounted(loadTokens)
               v-model="currentPassword"
               label="当前密码"
               type="password"
-              hint="更换邮箱需要验证当前密码"
+              hint="更换邮箱需要验证当前密码和新邮箱"
               persistent-hint
               @keydown.enter="submitProfile"
             />

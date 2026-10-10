@@ -30,6 +30,7 @@ export async function createUser(input: {
   password: string
   displayName?: string
   isAdmin?: boolean
+  emailVerified?: boolean
 }): Promise<UserRow> {
   const { db, tables } = await getDb()
   const email = normalizeEmail(input.email)
@@ -37,14 +38,15 @@ export async function createUser(input: {
   const rows = await db.insert(tables.users).values({
     id: randomUUID(),
     email,
+    emailVerified: input.emailVerified ?? false,
     displayName: input.displayName?.trim() || email.split('@')[0] || email,
     passwordHash: await hashPassword(input.password),
     isAdmin: input.isAdmin ?? false,
     createdAt: Date.now(),
-  }).returning()
+  }).onConflictDoNothing({ target: tables.users.email }).returning()
 
   const row = rows[0]
-  if (!row) throw appError(500, 'VALIDATION_ERROR', '创建用户失败，请重试')
+  if (!row) throw appError(409, 'EMAIL_TAKEN', '该邮箱已被注册')
   return row
 }
 
@@ -57,6 +59,7 @@ export async function listUsers(): Promise<UserRow[]> {
 export async function setUserAdmin(id: string, isAdmin: boolean): Promise<UserRow> {
   const user = await findUserById(id)
   if (!user) throw appError(404, 'NOT_FOUND', '用户不存在')
+  if (isAdmin && !user.emailVerified) throw appError(409, 'CONFLICT', '用户验证邮箱后才能获得管理员权限')
 
   const { db, tables } = await getDb()
   await db.update(tables.users).set({ isAdmin }).where(eq(tables.users.id, id))
@@ -67,7 +70,7 @@ export async function setUserAdmin(id: string, isAdmin: boolean): Promise<UserRo
 /** 改自己的资料。字段由这里白名单限定，passwordHash 必须是已经哈希过的结果。 */
 export async function updateUserProfile(
   id: string,
-  patch: { displayName?: string, email?: string, passwordHash?: string },
+  patch: { displayName?: string, passwordHash?: string },
 ): Promise<UserRow> {
   const { db, tables } = await getDb()
   const rows = await db.update(tables.users).set(patch).where(eq(tables.users.id, id)).returning()
@@ -90,6 +93,7 @@ export async function toAuthUser(row: UserRow): Promise<AuthUser> {
   return {
     id: row.id,
     email: row.email,
+    emailVerified: row.emailVerified,
     displayName: row.displayName,
     isAdmin: row.isAdmin,
     createdAt: row.createdAt,

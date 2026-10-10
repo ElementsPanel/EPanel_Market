@@ -1,3 +1,5 @@
+import type { SiteSettings } from './settings'
+
 export type DbDriver = 'sqlite' | 'postgres'
 
 export interface SqliteDbConfig {
@@ -23,9 +25,11 @@ export interface AppConfig {
   }
   /** 会话 token 哈希使用的 pepper，初始化时随机生成 */
   secret: string
+  site?: SiteSettings
 }
 
 export interface SetupPayload {
+  settings: SiteSettings
   driver: DbDriver
   sqlite?: Partial<SqliteDbConfig>
   postgres?: Partial<PostgresDbConfig>

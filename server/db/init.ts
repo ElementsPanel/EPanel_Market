@@ -43,6 +43,7 @@ export async function initializeApp(payload: SetupPayload): Promise<InitializeRe
       password: payload.admin.password,
       displayName: payload.admin.displayName,
       isAdmin: true,
+      emailVerified: true,
     })
 
     const token = await createSession(user.id)

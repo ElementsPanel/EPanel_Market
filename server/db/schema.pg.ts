@@ -6,6 +6,7 @@ import { bigint, boolean, bytea, index, integer, pgTable, text, uniqueIndex } fr
 export const users = pgTable('users', {
   id: text('id').primaryKey().$defaultFn(() => randomUUID()),
   email: text('email').notNull().unique(),
+  emailVerified: boolean('email_verified').notNull().default(false),
   displayName: text('display_name').notNull(),
   passwordHash: text('password_hash').notNull(),
   isAdmin: boolean('is_admin').notNull().default(false),
@@ -31,6 +32,20 @@ export const sessions = pgTable('sessions', {
 }, table => [
   index('idx_sessions_user').on(table.userId),
   index('idx_sessions_expires').on(table.expiresAt),
+])
+
+export const emailVerificationTokens = pgTable('email_verification_tokens', {
+  tokenHash: text('token_hash').primaryKey(),
+  userId: text('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+  email: text('email').notNull(),
+  previousEmail: text('previous_email').notNull(),
+  purpose: text('purpose').notNull().default('registration'),
+  createdAt: bigint('created_at', { mode: 'number' }).notNull(),
+  expiresAt: bigint('expires_at', { mode: 'number' }).notNull(),
+  usedAt: bigint('used_at', { mode: 'number' }),
+}, table => [
+  index('idx_email_verification_user').on(table.userId),
+  index('idx_email_verification_expires').on(table.expiresAt),
 ])
 
 /** 一个插件的身份。可见性由 `visibility` 决定，审核状态在 plugin_versions 上。 */

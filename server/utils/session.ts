@@ -75,6 +75,13 @@ export async function destroyOtherSessions(event: H3Event, userId: string): Prom
   ))
 }
 
+export async function destroyUserSessions(event: H3Event, userId: string): Promise<void> {
+  const current = await resolveSessionUser(event)
+  const { db, tables } = await getDb()
+  await db.delete(tables.sessions).where(eq(tables.sessions.userId, userId))
+  if (current?.id === userId) clearSessionCookie(event)
+}
+
 /** 读取当前请求对应的用户，过期会话会被顺带清理 */
 export async function resolveSessionUser(event: H3Event): Promise<UserRow | null> {
   const token = readSessionToken(event)
@@ -92,5 +99,6 @@ export async function resolveSessionUser(event: H3Event): Promise<UserRow | null
     return null
   }
 
-  return await findUserById(session.userId)
+  const user = await findUserById(session.userId)
+  return user?.emailVerified === false ? null : user
 }

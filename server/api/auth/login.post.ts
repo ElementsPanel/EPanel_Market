@@ -16,6 +16,8 @@ export default defineEventHandler(async (event) => {
     throw appError(401, 'INVALID_CREDENTIALS', '邮箱或密码错误')
   }
 
+  if (!user.emailVerified) throw appError(403, 'EMAIL_NOT_VERIFIED', '请先验证邮箱，验证后即可登录')
+
   setSessionCookie(event, await createSession(user.id))
 
   return { user: await toAuthUser(user) }

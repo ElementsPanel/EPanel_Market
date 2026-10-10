@@ -1,6 +1,7 @@
 export interface AuthUser {
   id: string
   email: string
+  emailVerified: boolean
   displayName: string
   isAdmin: boolean
   createdAt: number
@@ -19,12 +20,22 @@ export interface RegisterBody {
   displayName?: string
 }
 
+export interface RegistrationResult {
+  ok: true
+  message: string
+}
+
 /** 改自己的资料。改邮箱或改密码时必须带 currentPassword 供服务端校验。 */
 export interface UpdateMeBody {
   displayName?: string
   email?: string
   newPassword?: string
   currentPassword?: string
+}
+
+export interface UpdateMeResult {
+  user: AuthUser
+  pendingEmail?: string
 }
 
 /** 账号名下的一个发布令牌（发布脚本连接市场时签发）。令牌明文只在签发时出现一次。 */
@@ -38,12 +49,17 @@ export interface ApiTokenSummary {
 export type ApiErrorCode =
   | 'VALIDATION_ERROR'
   | 'EMAIL_TAKEN'
+  | 'EMAIL_NOT_VERIFIED'
   | 'INVALID_CREDENTIALS'
   | 'UNAUTHORIZED'
   | 'FORBIDDEN'
   | 'NOT_FOUND'
   | 'CONFLICT'
   | 'TOKEN_INVALID'
+  | 'TOKEN_EXPIRED'
+  | 'MAIL_NOT_CONFIGURED'
+  | 'MAIL_SEND_FAILED'
+  | 'RATE_LIMITED'
   | 'PAYLOAD_TOO_LARGE'
   | 'NOT_INITIALIZED'
   | 'ALREADY_INITIALIZED'

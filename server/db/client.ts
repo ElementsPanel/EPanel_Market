@@ -6,6 +6,7 @@ import type { AppConfig, DbDriver } from '../../shared/types/setup'
 import { readConfig } from '../utils/config'
 import { resolveDataFile } from '../utils/paths'
 import { ddlFor } from './ddl'
+import { migrateSchema } from './migrations'
 import { tablesFor, type AppTables } from './schema'
 
 /**
@@ -37,7 +38,7 @@ let schemaReady: Promise<void> | null = null
  */
 function ensureSchema(context: AppContext): Promise<void> {
   if (!schemaReady) {
-    schemaReady = context.execDdl(ddlFor(context.dialect)).catch((error) => {
+    schemaReady = context.execDdl(ddlFor(context.dialect)).then(() => migrateSchema(context)).catch((error) => {
       schemaReady = null
       throw error
     })

@@ -70,5 +70,6 @@ export function buildConfig(payload: SetupPayload): AppConfig {
       },
     },
     secret: randomBytes(32).toString('base64'),
+    site: payload.settings,
   }
 }

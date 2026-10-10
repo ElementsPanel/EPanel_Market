@@ -4,6 +4,7 @@ const SQLITE_DDL = `
 CREATE TABLE IF NOT EXISTS users (
   id            TEXT    PRIMARY KEY,
   email         TEXT    NOT NULL UNIQUE,
+  email_verified INTEGER NOT NULL DEFAULT 0,
   display_name  TEXT    NOT NULL,
   password_hash TEXT    NOT NULL,
   is_admin      INTEGER NOT NULL DEFAULT 0,
@@ -25,6 +26,18 @@ CREATE TABLE IF NOT EXISTS sessions (
 );
 CREATE INDEX IF NOT EXISTS idx_sessions_user    ON sessions(user_id);
 CREATE INDEX IF NOT EXISTS idx_sessions_expires ON sessions(expires_at);
+CREATE TABLE IF NOT EXISTS email_verification_tokens (
+  token_hash TEXT PRIMARY KEY,
+  user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  email TEXT NOT NULL,
+  previous_email TEXT NOT NULL,
+  purpose TEXT NOT NULL DEFAULT 'registration',
+  created_at INTEGER NOT NULL,
+  expires_at INTEGER NOT NULL,
+  used_at INTEGER
+);
+CREATE INDEX IF NOT EXISTS idx_email_verification_user ON email_verification_tokens(user_id);
+CREATE INDEX IF NOT EXISTS idx_email_verification_expires ON email_verification_tokens(expires_at);
 CREATE TABLE IF NOT EXISTS plugins (
   id           TEXT    PRIMARY KEY,
   name         TEXT    NOT NULL,
@@ -79,6 +92,7 @@ const POSTGRES_DDL = `
 CREATE TABLE IF NOT EXISTS users (
   id            TEXT    PRIMARY KEY,
   email         TEXT    NOT NULL UNIQUE,
+  email_verified BOOLEAN NOT NULL DEFAULT FALSE,
   display_name  TEXT    NOT NULL,
   password_hash TEXT    NOT NULL,
   is_admin      BOOLEAN NOT NULL DEFAULT FALSE,
@@ -100,6 +114,18 @@ CREATE TABLE IF NOT EXISTS sessions (
 );
 CREATE INDEX IF NOT EXISTS idx_sessions_user    ON sessions(user_id);
 CREATE INDEX IF NOT EXISTS idx_sessions_expires ON sessions(expires_at);
+CREATE TABLE IF NOT EXISTS email_verification_tokens (
+  token_hash TEXT PRIMARY KEY,
+  user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  email TEXT NOT NULL,
+  previous_email TEXT NOT NULL,
+  purpose TEXT NOT NULL DEFAULT 'registration',
+  created_at BIGINT NOT NULL,
+  expires_at BIGINT NOT NULL,
+  used_at BIGINT
+);
+CREATE INDEX IF NOT EXISTS idx_email_verification_user ON email_verification_tokens(user_id);
+CREATE INDEX IF NOT EXISTS idx_email_verification_expires ON email_verification_tokens(expires_at);
 CREATE TABLE IF NOT EXISTS plugins (
   id           TEXT    PRIMARY KEY,
   name         TEXT    NOT NULL,

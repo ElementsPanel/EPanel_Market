@@ -9,7 +9,7 @@ import { apiErrorMessage } from '../utils/apiError'
 
 definePageMeta({ middleware: 'admin' })
 
-type TabKey = 'review' | 'plugins' | 'users'
+type TabKey = 'review' | 'plugins' | 'users' | 'settings'
 
 const tab = ref<TabKey>('review')
 const loading = ref(false)
@@ -62,6 +62,11 @@ function sessionHeaders() {
 
 async function load(key: TabKey) {
   const sequence = ++loadSequence
+  if (key === 'settings') {
+    loading.value = false
+    loadFailed.value = false
+    return
+  }
   loading.value = true
   loadFailed.value = false
   try {
@@ -213,6 +218,9 @@ watch(tab, (key) => load(key))
       </v-tab>
       <v-tab value="users">
         用户管理
+      </v-tab>
+      <v-tab value="settings">
+        邮件设置
       </v-tab>
     </v-tabs>
 
@@ -383,7 +391,14 @@ watch(tab, (key) => load(key))
           <tbody>
             <tr v-for="item in userItems" :key="item.id">
               <td>{{ item.displayName }}</td>
-              <td>{{ item.email }}</td>
+              <td>
+                {{ item.email }}
+                <div class="mt-1">
+                  <v-chip size="x-small" :color="item.emailVerified ? 'success' : 'warning'" variant="tonal">
+                    {{ item.emailVerified ? '已验证' : '待验证' }}
+                  </v-chip>
+                </div>
+              </td>
               <td>{{ item.pluginCount }}</td>
               <td>{{ formatDate(item.createdAt) }}</td>
               <td>
@@ -393,7 +408,7 @@ watch(tab, (key) => load(key))
                   hide-details
                   density="compact"
                   :loading="acting === item.id"
-                  :disabled="Boolean(acting)"
+                  :disabled="Boolean(acting) || (!item.isAdmin && !item.emailVerified)"
                   @update:model-value="toggleAdmin(item)"
                 />
               </td>
@@ -417,6 +432,9 @@ watch(tab, (key) => load(key))
             没有用户
           </v-card-text>
         </v-card>
+      </v-tabs-window-item>
+      <v-tabs-window-item value="settings">
+        <SiteSettingsPanel />
       </v-tabs-window-item>
     </v-tabs-window>
 

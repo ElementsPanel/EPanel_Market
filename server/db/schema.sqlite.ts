@@ -6,6 +6,7 @@ import { blob, index, integer, sqliteTable, text, uniqueIndex } from 'drizzle-or
 export const users = sqliteTable('users', {
   id: text('id').primaryKey().$defaultFn(() => randomUUID()),
   email: text('email').notNull().unique(),
+  emailVerified: integer('email_verified', { mode: 'boolean' }).notNull().default(false),
   displayName: text('display_name').notNull(),
   passwordHash: text('password_hash').notNull(),
   isAdmin: integer('is_admin', { mode: 'boolean' }).notNull().default(false),
@@ -34,6 +35,20 @@ export const sessions = sqliteTable('sessions', {
 }, table => [
   index('idx_sessions_user').on(table.userId),
   index('idx_sessions_expires').on(table.expiresAt),
+])
+
+export const emailVerificationTokens = sqliteTable('email_verification_tokens', {
+  tokenHash: text('token_hash').primaryKey(),
+  userId: text('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+  email: text('email').notNull(),
+  previousEmail: text('previous_email').notNull(),
+  purpose: text('purpose').notNull().default('registration'),
+  createdAt: integer('created_at').notNull(),
+  expiresAt: integer('expires_at').notNull(),
+  usedAt: integer('used_at'),
+}, table => [
+  index('idx_email_verification_user').on(table.userId),
+  index('idx_email_verification_expires').on(table.expiresAt),
 ])
 
 /** 一个插件的身份。可见性由 `visibility` 决定，审核状态在 plugin_versions 上。 */
