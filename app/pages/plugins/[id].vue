@@ -35,8 +35,9 @@ function markIconFailed() {
   iconFailed.value = true
 }
 
-function iconUrl(pluginId: string) {
-  return `/api/plugins/${encodeURIComponent(pluginId)}/icon`
+function iconUrl(pluginId: string, version?: string) {
+  const query = version ? `?version=${encodeURIComponent(version)}` : ''
+  return `/api/plugins/${encodeURIComponent(pluginId)}/icon${query}`
 }
 
 function downloadUrl(side: PluginSide, version: string) {
@@ -107,17 +108,14 @@ function formatSize(bytes: number) {
       <!-- 商店式的头部：左边是插件本身，右边是唯一的主动作 -->
       <header class="detail-header">
         <div class="detail-heading">
-          <v-avatar
-            :color="data.hasIcon && !iconFailed ? 'surface' : 'primary'"
-            :variant="data.hasIcon && !iconFailed ? 'flat' : 'tonal'"
-            size="64"
-            rounded="lg"
-          >
+          <v-avatar class="plugin-detail-icon" size="64" rounded="12px" color="surface" variant="flat">
             <v-img
               v-if="data.hasIcon && !iconFailed"
-              :src="iconUrl(data.id)"
+              :src="iconUrl(data.id, data.selectedVersion.version)"
               alt=""
               cover
+              transition="fade-transition"
+              class="plugin-detail-icon-image"
               @error="markIconFailed"
             />
             <v-icon v-else icon="mdi-puzzle-outline" size="34" />
@@ -255,6 +253,16 @@ function formatSize(bytes: number) {
   gap: 20px;
   flex: 1 1 420px;
   min-width: 0;
+}
+
+.plugin-detail-icon {
+  flex: 0 0 auto;
+  overflow: hidden;
+}
+
+.plugin-detail-icon-image {
+  width: 100%;
+  height: 100%;
 }
 
 .detail-heading-text {

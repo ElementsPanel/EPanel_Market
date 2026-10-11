@@ -50,8 +50,9 @@ function markIconFailed(pluginId: string) {
   failedIcons.value[pluginId] = true
 }
 
-function iconUrl(pluginId: string) {
-  return `/api/plugins/${encodeURIComponent(pluginId)}/icon`
+function iconUrl(pluginId: string, version?: string) {
+  const query = version ? `?version=${encodeURIComponent(version)}` : ''
+  return `/api/plugins/${encodeURIComponent(pluginId)}/icon${query}`
 }
 
 function search() {
@@ -123,42 +124,39 @@ function formatDate(timestamp?: number) {
     <template v-else-if="items.length">
       <v-row>
         <v-col v-for="plugin in items" :key="plugin.id" cols="12" sm="6" md="4">
-          <!-- pa-2 给卡片 8px 内边距；转 flex 列容器后 v-card-text 会吃掉剩余高度，
-               把版本号和日期所在的操作行顶到每一张卡片的底部对齐 -->
-          <v-card class="h-100 pa-2 d-flex flex-column" hover @click="navigateTo(`/plugins/${plugin.id}`)">
-            <v-card-item>
-              <template #prepend>
-                <v-avatar
-                  :color="plugin.hasIcon && !failedIcons[plugin.id] ? 'surface' : 'primary'"
-                  :variant="plugin.hasIcon && !failedIcons[plugin.id] ? 'flat' : 'tonal'"
-                  size="52"
-                  rounded="lg"
-                >
-                  <!-- 包里的 icon.png；没有或取不到时仍是那块拼图 -->
+          <!-- 卡片按列布局，操作行固定在底部，便于不同简介长度的卡片对齐。 -->
+          <v-card class="plugin-market-card h-100" hover @click="navigateTo(`/plugins/${plugin.id}`)">
+            <v-card-text class="plugin-market-card-content">
+              <div class="plugin-market-card-head">
+                <!-- 有图标时加载包内图片；没有或加载失败时显示默认图标。 -->
+                <v-avatar class="plugin-market-icon" size="52" rounded="12px" color="surface" variant="flat">
                   <v-img
                     v-if="plugin.hasIcon && !failedIcons[plugin.id]"
-                    :src="iconUrl(plugin.id)"
+                    :src="iconUrl(plugin.id, plugin.latestVersion?.version)"
                     alt=""
                     cover
+                    transition="fade-transition"
+                    class="plugin-market-icon-image"
                     @error="markIconFailed(plugin.id)"
                   />
-                  <v-icon v-else icon="mdi-puzzle-outline" />
+                  <v-icon v-else icon="mdi-puzzle-outline" size="28" />
                 </v-avatar>
-              </template>
-              <v-card-title class="text-body-1">
-                {{ plugin.displayName }}
-              </v-card-title>
-              <v-card-subtitle>
-                {{ plugin.author.displayName }}
-                <span v-if="plugin.category">· {{ plugin.category }}</span>
-              </v-card-subtitle>
-            </v-card-item>
-
-            <v-card-text class="text-body-2 text-medium-emphasis">
-              {{ plugin.summary || '暂无简介' }}
+                <div class="plugin-market-card-heading">
+                  <div class="text-h6">
+                    {{ plugin.displayName }}
+                  </div>
+                  <div class="text-caption text-medium-emphasis">
+                    {{ plugin.author.displayName }}
+                    <span v-if="plugin.category">· {{ plugin.category }}</span>
+                  </div>
+                </div>
+              </div>
+              <div class="plugin-market-card-summary text-body-2 text-medium-emphasis">
+                {{ plugin.summary || '暂无简介' }}
+              </div>
             </v-card-text>
 
-            <v-card-actions>
+            <v-card-actions class="plugin-market-card-actions">
               <v-chip v-if="plugin.latestVersion" size="small" variant="tonal">
                 v{{ plugin.latestVersion.version }}
               </v-chip>
@@ -197,3 +195,51 @@ function formatDate(timestamp?: number) {
     </v-card>
   </v-container>
 </template>
+
+<style scoped>
+.plugin-market-card-content {
+  flex: 1 0 auto;
+}
+
+.plugin-market-card {
+  display: flex;
+  flex-direction: column;
+  padding: 12px 8px;
+}
+
+.plugin-market-card-head {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.plugin-market-card-heading {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.plugin-market-icon {
+  flex-shrink: 0;
+  overflow: hidden;
+}
+
+.plugin-market-icon-image {
+  width: 100%;
+  height: 100%;
+}
+
+.plugin-market-card-summary {
+  display: -webkit-box;
+  overflow: hidden;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-height: 1.5;
+  text-overflow: ellipsis;
+}
+
+.plugin-market-card-actions {
+  align-items: center;
+  padding-top: 8px;
+}
+</style>
