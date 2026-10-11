@@ -299,7 +299,6 @@ function formatSize(bytes: number) {
 }
 
 .detail-tabs {
-  border-bottom: 1px solid rgba(var(--v-theme-on-surface), 0.12);
   margin-bottom: 24px;
 }
 
