@@ -302,11 +302,21 @@ function formatSize(bytes: number) {
   margin-bottom: 24px;
 }
 
-/* 选中指示条与控制台页签保持一致：原生 slider 保持透明以保留位移动画，
-   可见部分由 ::after 画成居中、两端收窄的短条 */
+/* 页签按钮与 ElementsPanel 保持一致，让指示条动画可以跨过相邻按钮。 */
+:deep(.v-btn.v-tab) {
+  overflow: visible !important;
+}
+
+:deep(.v-btn.v-tab > .v-btn__overlay),
+:deep(.v-btn.v-tab > .v-btn__underlay) {
+  border-radius: inherit;
+}
+
+/* 原生 slider 保留位移动画，可见部分由 ::after 画成居中、两端收窄的短条。 */
 :deep(.v-btn.v-tab) .v-tab__slider {
-  height: 4px;
-  background: transparent;
+  z-index: 1;
+  height: 4px !important;
+  background: transparent !important;
 }
 
 :deep(.v-btn.v-tab) .v-tab__slider::after {
