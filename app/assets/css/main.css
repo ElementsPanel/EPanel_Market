@@ -34,3 +34,32 @@ body {
 .v-field--variant-underlined .v-field__outline::after {
   content: none;
 }
+
+/* 全站页签按钮与 ElementsPanel 保持一致：指示条动画可以跨过相邻按钮。 */
+.v-btn.v-tab {
+  overflow: visible !important;
+}
+
+.v-btn.v-tab > .v-btn__overlay,
+.v-btn.v-tab > .v-btn__underlay {
+  border-radius: inherit;
+}
+
+/* 保留 Vuetify 原生 slider 的位移动画，可见部分使用居中短条。 */
+.v-btn.v-tab .v-tab__slider {
+  z-index: 1;
+  height: 4px !important;
+  background: transparent !important;
+}
+
+.v-btn.v-tab .v-tab__slider::after {
+  position: absolute;
+  top: 0;
+  left: 50%;
+  width: 40%;
+  height: 4px;
+  border-radius: 4px 4px 0 0;
+  background-color: currentColor;
+  content: '';
+  transform: translateX(-50%);
+}

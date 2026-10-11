@@ -476,24 +476,3 @@ watch(tab, (key) => load(key))
     </v-dialog>
   </v-container>
 </template>
-
-<style scoped>
-/* 选中指示条沿用 ElementsPanel 的形式：原生 slider 保持透明以保留位移动画，
-   可见部分由 ::after 画成居中、两端收窄的短条 */
-:deep(.v-btn.v-tab) .v-tab__slider {
-  height: 4px;
-  background: transparent;
-}
-
-:deep(.v-btn.v-tab) .v-tab__slider::after {
-  position: absolute;
-  top: 0;
-  left: 50%;
-  width: 40%;
-  height: 4px;
-  border-radius: 4px 4px 0 0;
-  background-color: currentColor;
-  content: '';
-  transform: translateX(-50%);
-}
-</style>

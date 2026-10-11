@@ -302,35 +302,6 @@ function formatSize(bytes: number) {
   margin-bottom: 24px;
 }
 
-/* 页签按钮与 ElementsPanel 保持一致，让指示条动画可以跨过相邻按钮。 */
-:deep(.v-btn.v-tab) {
-  overflow: visible !important;
-}
-
-:deep(.v-btn.v-tab > .v-btn__overlay),
-:deep(.v-btn.v-tab > .v-btn__underlay) {
-  border-radius: inherit;
-}
-
-/* 原生 slider 保留位移动画，可见部分由 ::after 画成居中、两端收窄的短条。 */
-:deep(.v-btn.v-tab) .v-tab__slider {
-  z-index: 1;
-  height: 4px !important;
-  background: transparent !important;
-}
-
-:deep(.v-btn.v-tab) .v-tab__slider::after {
-  position: absolute;
-  top: 0;
-  left: 50%;
-  width: 40%;
-  height: 4px;
-  border-radius: 4px 4px 0 0;
-  background-color: currentColor;
-  content: '';
-  transform: translateX(-50%);
-}
-
 .detail-sidebar-section + .detail-sidebar-section {
   margin-top: 28px;
 }
