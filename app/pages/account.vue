@@ -1,5 +1,4 @@
 <script setup lang="ts">
-import type { ApiTokenSummary } from '../../shared/types/auth'
 import { AVATAR_MAX_BYTES, AVATAR_MIME_TYPES } from '../../shared/utils/avatar'
 
 definePageMeta({ middleware: 'auth' })
@@ -123,49 +122,6 @@ async function removeAvatar() {
     avatarBusy.value = false
   }
 }
-
-// 发布令牌：ElementsPanel 的发布脚本连接市场时签发。撤销后那台机器再发布时会重新走授权。
-const tokens = ref<ApiTokenSummary[]>([])
-// 服务端渲染时还没请求过，先当作在加载：否则有令牌的人会先看到一句「还没有签发过」。
-const tokensLoading = ref(true)
-const tokensFailed = ref(false)
-const revokingToken = ref('')
-
-async function loadTokens() {
-  tokensLoading.value = true
-  tokensFailed.value = false
-  try {
-    tokens.value = (await $fetch<{ items: ApiTokenSummary[] }>('/api/account/tokens')).items
-  } catch (error) {
-    tokensFailed.value = true
-    toast.error(errorMessage(error))
-  } finally {
-    tokensLoading.value = false
-  }
-}
-
-async function revokeToken(token: ApiTokenSummary) {
-  if (revokingToken.value) return
-  revokingToken.value = token.id
-  try {
-    await $fetch(`/api/account/tokens/${encodeURIComponent(token.id)}`, { method: 'DELETE' })
-    tokens.value = tokens.value.filter(item => item.id !== token.id)
-    toast.success('发布令牌已撤销')
-  } catch (error) {
-    toast.error(errorMessage(error))
-  } finally {
-    revokingToken.value = ''
-  }
-}
-
-function tokenSubtitle(token: ApiTokenSummary) {
-  const issued = new Date(token.createdAt).toLocaleString('zh-CN')
-  const used = token.lastUsedAt ? new Date(token.lastUsedAt).toLocaleString('zh-CN') : '从未使用'
-  return `签发于 ${issued} · 最近使用：${used}`
-}
-
-// 令牌列表只在浏览器里取：页面本身要登录，服务端渲染时不必替它转发 Cookie
-onMounted(loadTokens)
 </script>
 
 <template>
@@ -268,47 +224,6 @@ onMounted(loadTokens)
               修改密码
             </v-btn>
           </v-card-actions>
-        </v-card>
-
-        <v-card class="mt-4">
-          <v-card-title class="text-h6">
-            发布令牌
-          </v-card-title>
-          <v-card-subtitle>
-            ElementsPanel 的发布脚本连接市场时签发，只能用来上传插件和查看你的提交记录
-          </v-card-subtitle>
-
-          <v-card-text>
-            <v-progress-linear v-if="tokensLoading" indeterminate class="mb-2" />
-            <div v-else-if="tokensFailed" class="d-flex align-center justify-space-between ga-2">
-              <span class="text-body-2 text-medium-emphasis">暂时无法加载发布令牌</span>
-              <v-btn variant="text" size="small" @click="loadTokens">重试</v-btn>
-            </div>
-            <div v-else-if="!tokens.length" class="text-body-2 text-medium-emphasis">
-              还没有签发过发布令牌
-            </div>
-            <v-list v-if="tokens.length" density="compact" class="pa-0">
-              <v-list-item
-                v-for="token in tokens"
-                :key="token.id"
-                :title="token.name || '发布令牌'"
-                :subtitle="tokenSubtitle(token)"
-              >
-                <template #append>
-                  <v-btn
-                    size="small"
-                    color="error"
-                    variant="text"
-                    :loading="revokingToken === token.id"
-                    :disabled="Boolean(revokingToken) && revokingToken !== token.id"
-                    @click="revokeToken(token)"
-                  >
-                    撤销
-                  </v-btn>
-                </template>
-              </v-list-item>
-            </v-list>
-          </v-card-text>
         </v-card>
       </v-col>
     </v-row>

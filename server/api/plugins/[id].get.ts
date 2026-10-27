@@ -1,4 +1,4 @@
-import { getPluginDetail } from '../../services/plugins'
+import { getIndexedPlugin } from '../../services/npm-plugins'
 import { appError } from '../../utils/errors'
 
 export default defineEventHandler(async (event) => {
@@ -10,5 +10,5 @@ export default defineEventHandler(async (event) => {
     throw appError(400, 'VALIDATION_ERROR', '版本号必须是字符串')
   }
 
-  return await getPluginDetail(id, query.version?.trim() || undefined)
+  return await getIndexedPlugin(id, query.version?.trim() || undefined)
 })

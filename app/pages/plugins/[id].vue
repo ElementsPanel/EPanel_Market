@@ -19,69 +19,22 @@ if (import.meta.client) {
   }, { immediate: true })
 }
 
-const tab = ref<'readme' | 'versions' | 'updates'>('readme')
+const tab = ref<'readme' | 'versions'>('readme')
 
 const sides = computed<PluginSide[]>(() => data.value?.sides ?? [])
 const sideLabel = computed(() => pluginSideLabel(sides.value))
-
-// 包里的 icon.png 就是插件的门面；没有或取不到时退回默认拼图图标。换插件要重来一次，
-// 否则上一张图的失败状态会把它永远按在兜底样式上。
-const iconFailed = ref(false)
-watch(() => data.value?.id, () => {
-  iconFailed.value = false
-})
-
-function markIconFailed() {
-  iconFailed.value = true
-}
-
-function iconUrl(pluginId: string, version?: string) {
-  const query = version ? `?version=${encodeURIComponent(version)}` : ''
-  return `/api/plugins/${encodeURIComponent(pluginId)}/icon${query}`
-}
-
-function downloadUrl(side: PluginSide, version: string) {
-  const params = new URLSearchParams({ side, version })
-  return `/api/plugins/${encodeURIComponent(id.value)}/download?${params}`
-}
-
-/** 一个版本的下载入口：单端一个按钮，双端为此先下拉选端。 */
-function targetsFor(version: { version: string; sides?: PluginSide[] }) {
-  // 逐版本的端信息缺失（旧服务器或旧缓存的响应）时退回插件级的，再没有才不给按钮，
-  // 而不是让渲染在这一步崩掉。
-  const list = version.sides?.length ? version.sides : (data.value?.sides ?? [])
-  return list.map((side) => ({
-    side,
-    label: side === 'panel' ? '下载 Panel 端' : '下载 Daemon 端',
-    href: downloadUrl(side, version.version),
-  }))
-}
-
-const downloadTargets = computed(() => {
-  const map = new Map<string, ReturnType<typeof targetsFor>>()
-  for (const version of data.value?.versions ?? []) map.set(version.id, targetsFor(version))
-  return map
-})
-
-// selectedVersion 在没有 version 参数时就是最新已通过版本。
-const headerTargets = computed(() =>
-  data.value ? targetsFor(data.value.selectedVersion) : []
+const npmLink = computed(() =>
+  data.value ? `https://www.npmjs.com/package/${data.value.name}` : ''
 )
 
 useSeoMeta({
   title: () => (data.value ? `${data.value.displayName} · 插件市场` : '插件详情'),
-  description: () => data.value?.summary || '查看插件说明、版本历史与更新内容',
+  description: () => data.value?.summary || '查看插件说明与版本历史',
 })
 
 function formatDate(timestamp?: number) {
   if (!timestamp) return ''
   return new Date(timestamp).toLocaleString('zh-CN')
-}
-
-function formatSize(bytes: number) {
-  if (bytes < 1024) return `${bytes} B`
-  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`
-  return `${(bytes / 1024 / 1024).toFixed(1)} MB`
 }
 </script>
 
@@ -109,16 +62,7 @@ function formatSize(bytes: number) {
       <header class="detail-header">
         <div class="detail-heading">
           <v-avatar class="plugin-detail-icon" size="64" rounded="12px" color="surface" variant="flat">
-            <v-img
-              v-if="data.hasIcon && !iconFailed"
-              :src="iconUrl(data.id, data.selectedVersion.version)"
-              alt=""
-              cover
-              transition="fade-transition"
-              class="plugin-detail-icon-image"
-              @error="markIconFailed"
-            />
-            <v-icon v-else icon="mdi-puzzle-outline" size="34" />
+            <v-icon icon="mdi-puzzle-outline" size="34" />
           </v-avatar>
           <div class="detail-heading-text">
             <h1 class="detail-title">
@@ -138,14 +82,22 @@ function formatSize(bytes: number) {
         </div>
 
         <div class="detail-action">
-          <PluginDownloadButton :targets="headerTargets" prominent />
+          <v-btn
+            color="primary"
+            variant="flat"
+            prepend-icon="mdi-open-in-new"
+            :href="npmLink"
+            target="_blank"
+            rel="noreferrer"
+          >
+            在 npm 查看
+          </v-btn>
         </div>
       </header>
 
       <v-tabs v-model="tab" color="primary" class="detail-tabs">
         <v-tab value="readme">自述</v-tab>
         <v-tab value="versions">版本</v-tab>
-        <v-tab value="updates">更新</v-tab>
       </v-tabs>
 
       <v-row>
@@ -166,30 +118,11 @@ function formatSize(bytes: number) {
                 <div v-for="item in data.versions" :key="item.id" class="version-item">
                   <div class="version-item-text">
                     <span class="version-item-name">v{{ item.version }}</span>
-                    <span class="version-item-meta">
-                      {{ formatDate(item.submittedAt) }} ·
-                      {{ formatSize(item.sizeBytes) }} · {{ item.fileCount }} 个文件
-                    </span>
+                    <span class="version-item-meta">{{ formatDate(item.submittedAt) }}</span>
                   </div>
-                  <PluginDownloadButton :targets="downloadTargets.get(item.id) ?? []" />
+                  <PluginSideBadges :sides="item.sides?.length ? item.sides : sides" />
                 </div>
               </div>
-            </v-tabs-window-item>
-
-            <v-tabs-window-item value="updates">
-              <article
-                v-for="item in data.versions"
-                :key="item.id"
-                class="update-item"
-              >
-                <div class="update-head">
-                  <span class="update-version">v{{ item.version }}</span>
-                  <span class="update-date">{{ formatDate(item.submittedAt) }}</span>
-                </div>
-                <p class="plugin-detail-text update-body">
-                  {{ item.changelog || '暂无更新说明' }}
-                </p>
-              </article>
             </v-tabs-window-item>
           </v-tabs-window>
         </v-col>
@@ -204,7 +137,7 @@ function formatSize(bytes: number) {
             <h2 class="detail-sidebar-title">更多信息</h2>
             <dl class="detail-info">
               <div class="detail-info-row">
-                <dt>插件 ID</dt>
+                <dt>npm 包名</dt>
                 <dd>{{ data.name }}</dd>
               </div>
               <div class="detail-info-row">
@@ -214,13 +147,6 @@ function formatSize(bytes: number) {
               <div class="detail-info-row">
                 <dt>最新版本</dt>
                 <dd>v{{ data.selectedVersion.version }}</dd>
-              </div>
-              <div class="detail-info-row">
-                <dt>大小</dt>
-                <dd>
-                  {{ formatSize(data.selectedVersion.sizeBytes) }} ·
-                  {{ data.selectedVersion.fileCount }} 个文件
-                </dd>
               </div>
               <div class="detail-info-row">
                 <dt>端</dt>

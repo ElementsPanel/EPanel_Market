@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto'
-import { blob, index, integer, sqliteTable, text, uniqueIndex } from 'drizzle-orm/sqlite-core'
+import { blob, index, integer, sqliteTable, text } from 'drizzle-orm/sqlite-core'
 
 // ⚠ 必须与 server/db/schema.pg.ts 保持同构（列名、语义、TS 类型一致），
 // 否则 client.ts 里的统一类型断言会掩盖字段不一致的问题。
@@ -61,64 +61,31 @@ export const authCaptchaChallenges = sqliteTable('auth_captcha_challenges', {
   index('idx_auth_captcha_expires').on(table.expiresAt),
 ])
 
-/** 一个插件的身份。可见性由 `visibility` 决定，审核状态在 plugin_versions 上。 */
-export const plugins = sqliteTable('plugins', {
-  id: text('id').primaryKey().$defaultFn(() => randomUUID()),
-  name: text('name').notNull(),
-  authorId: text('author_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+/**
+ * npm 插件索引。市场只缓存 registry 元数据，不保存插件包文件；`name` 是 npm 包名，
+ * `id` 是插件标识，也是市场页面与面板安装接口使用的键。
+ */
+export const npmPlugins = sqliteTable('npm_plugins', {
+  id: text('id').primaryKey(),
+  name: text('name').notNull().unique(),
   displayName: text('display_name').notNull(),
   summary: text('summary').notNull().default(''),
   description: text('description').notNull().default(''),
   category: text('category').notNull().default(''),
-  /** `listed` 上架 / `hidden` 下架 */
-  visibility: text('visibility').notNull().default('listed'),
-  createdAt: integer('created_at').notNull(),
-  updatedAt: integer('updated_at').notNull(),
+  keywords: text('keywords').notNull().default('[]'),
+  authorName: text('author_name').notNull().default(''),
+  repository: text('repository').notNull().default(''),
+  homepage: text('homepage').notNull().default(''),
+  license: text('license').notNull().default(''),
+  latestVersion: text('latest_version').notNull(),
+  /** JSON 数组，内容与 PluginVersionSummary 同构。 */
+  versions: text('versions').notNull().default('[]'),
+  readme: text('readme').notNull().default(''),
+  sides: text('sides').notNull().default('[]'),
+  publishedAt: integer('published_at').notNull().default(0),
+  updatedAt: integer('updated_at').notNull().default(0),
+  syncedAt: integer('synced_at').notNull().default(0),
 }, table => [
-  uniqueIndex('uq_plugins_author_name').on(table.authorId, table.name),
-  index('idx_plugins_author').on(table.authorId),
+  index('idx_npm_plugins_updated').on(table.updatedAt),
 ])
 
-/** 每一次上传产生一个版本，`status` 为 pending 时即处于审核队列。 */
-export const pluginVersions = sqliteTable('plugin_versions', {
-  id: text('id').primaryKey().$defaultFn(() => randomUUID()),
-  pluginId: text('plugin_id').notNull().references(() => plugins.id, { onDelete: 'cascade' }),
-  version: text('version').notNull(),
-  /** `pending` / `approved` / `rejected` */
-  status: text('status').notNull().default('pending'),
-  artifactPath: text('artifact_path').notNull(),
-  fileCount: integer('file_count').notNull().default(0),
-  sizeBytes: integer('size_bytes').notNull().default(0),
-  changelog: text('changelog').notNull().default(''),
-  submittedAt: integer('submitted_at').notNull(),
-  reviewedAt: integer('reviewed_at'),
-  reviewerId: text('reviewer_id').references(() => users.id, { onDelete: 'set null' }),
-  reviewNote: text('review_note'),
-}, table => [
-  uniqueIndex('uq_plugin_versions_plugin_version').on(table.pluginId, table.version),
-  index('idx_plugin_versions_plugin').on(table.pluginId),
-  index('idx_plugin_versions_status').on(table.status),
-])
-
-/** 面板发布插件用的长期令牌，库里只存哈希。 */
-export const apiTokens = sqliteTable('api_tokens', {
-  id: text('id').primaryKey().$defaultFn(() => randomUUID()),
-  userId: text('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
-  tokenHash: text('token_hash').notNull().unique(),
-  name: text('name').notNull().default(''),
-  createdAt: integer('created_at').notNull(),
-  lastUsedAt: integer('last_used_at'),
-}, table => [
-  index('idx_api_tokens_user').on(table.userId),
-])
-
-/** 市场登录后为面板签发的一次性连接码，由面板轮询换取令牌。 */
-export const oauthCodes = sqliteTable('oauth_codes', {
-  state: text('state').primaryKey(),
-  userId: text('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
-  createdAt: integer('created_at').notNull(),
-  expiresAt: integer('expires_at').notNull(),
-  consumedAt: integer('consumed_at'),
-}, table => [
-  index('idx_oauth_codes_expires').on(table.expiresAt),
-])

@@ -38,23 +38,6 @@ const totalPages = computed(() =>
   result.value ? Math.max(1, Math.ceil(result.value.total / result.value.pageSize)) : 1
 )
 
-// 图标加载失败（旧插件没带、或取不到）时退回到默认拼图图标，按插件 id 记住失败。
-const failedIcons = ref<Record<string, boolean>>({})
-
-// 列表刷新后重试一次：只有 hasIcon 为真的插件才会发请求，所以清空不会造成额外的失败请求。
-watch(items, () => {
-  failedIcons.value = {}
-})
-
-function markIconFailed(pluginId: string) {
-  failedIcons.value[pluginId] = true
-}
-
-function iconUrl(pluginId: string, version?: string) {
-  const query = version ? `?version=${encodeURIComponent(version)}` : ''
-  return `/api/plugins/${encodeURIComponent(pluginId)}/icon${query}`
-}
-
 function search() {
   page.value = 1
   appliedKeyword.value = keyword.value
@@ -128,18 +111,8 @@ function formatDate(timestamp?: number) {
           <v-card class="plugin-market-card h-100" hover @click="navigateTo(`/plugins/${plugin.id}`)">
             <v-card-text class="plugin-market-card-content">
               <div class="plugin-market-card-head">
-                <!-- 有图标时加载包内图片；没有或加载失败时显示默认图标。 -->
                 <v-avatar class="plugin-market-icon" size="52" rounded="12px" color="surface" variant="flat">
-                  <v-img
-                    v-if="plugin.hasIcon && !failedIcons[plugin.id]"
-                    :src="iconUrl(plugin.id, plugin.latestVersion?.version)"
-                    alt=""
-                    cover
-                    transition="fade-transition"
-                    class="plugin-market-icon-image"
-                    @error="markIconFailed(plugin.id)"
-                  />
-                  <v-icon v-else icon="mdi-puzzle-outline" size="28" />
+                  <v-icon icon="mdi-puzzle-outline" size="28" />
                 </v-avatar>
                 <div class="plugin-market-card-heading">
                   <div class="text-h6">

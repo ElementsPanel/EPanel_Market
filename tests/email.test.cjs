@@ -427,7 +427,7 @@ test('changing a password invalidates pending email links', async (t) => {
   assert.equal((await f.users.findUserById(f.user.id)).passwordHash, 'hashed:changed-password')
 })
 
-test('unverified users cannot use session cookies or publishing tokens', async (t) => {
+test('unverified users cannot use session cookies', async (t) => {
   const f = await verificationFixture(t)
   const session = load('server/utils/session.ts', {
     '../db/client': { getDb: async () => f.context },
@@ -440,24 +440,12 @@ test('unverified users cannot use session cookies or publishing tokens', async (
       getRequestURL: () => new URL('https://market.example.com'),
     },
   })
-  const api = load('server/utils/api-token.ts', {
-    '../db/client': { getDb: async () => f.context },
-    '../services/users': f.users,
-    './config': f.configService,
-    './errors': errors,
-    './session': session,
-    'h3': { getHeader: (event) => event.authorization },
-  })
   const event = {
     cookie: await session.createSession(f.user.id),
-    authorization: `Bearer ${await api.issueApiToken(f.user.id)}`,
   }
   assert.equal(await session.resolveSessionUser(event), null)
-  assert.equal(await api.resolveApiUser(event), null)
-  assert.equal((await api.listApiTokens(f.user.id))[0].lastUsedAt, undefined)
   await f.db.update(tables.users).set({ emailVerified: true }).where(eq(tables.users.id, f.user.id))
   assert.equal((await session.resolveSessionUser(event)).id, f.user.id)
-  assert.equal((await api.resolveApiUser(event)).id, f.user.id)
 
   const otherUser = await f.users.createUser({ email: 'other@example.com', password: 'other-password', emailVerified: true })
   const otherEvent = { cookie: await session.createSession(otherUser.id) }

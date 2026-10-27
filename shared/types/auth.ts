@@ -42,13 +42,6 @@ export interface UpdateMeResult {
   pendingEmail?: string
 }
 
-/** 账号名下的一个发布令牌（发布脚本连接市场时签发）。令牌明文只在签发时出现一次。 */
-export interface ApiTokenSummary {
-  id: string
-  name: string
-  createdAt: number
-  lastUsedAt?: number
-}
 
 export type ApiErrorCode =
   | 'VALIDATION_ERROR'

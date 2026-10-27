@@ -1,58 +1,26 @@
 <script setup lang="ts">
-import type {
-  ConsolePluginItem,
-  ConsoleReviewItem,
-  ConsoleUserItem,
-} from '../../shared/types/console'
-import type { PluginVersionStatus } from '../../shared/types/plugins'
+import type { ConsoleUserItem } from '../../shared/types/console'
 import { apiErrorMessage } from '../utils/apiError'
 
 definePageMeta({ middleware: 'admin' })
 
-type TabKey = 'review' | 'plugins' | 'users' | 'settings'
+type TabKey = 'users' | 'index' | 'settings'
 
-const tab = ref<TabKey>('review')
+const tab = ref<TabKey>('users')
 const loading = ref(false)
 const loadFailed = ref(false)
 const toast = useToast()
 let loadSequence = 0
 
-const reviewItems = ref<ConsoleReviewItem[]>([])
-const pluginItems = ref<ConsolePluginItem[]>([])
 const userItems = ref<ConsoleUserItem[]>([])
+const acting = ref('')
 
-const STATUS_LABEL: Record<PluginVersionStatus, string> = {
-  pending: '待审核',
-  approved: '已通过',
-  rejected: '已驳回',
-}
-
-const STATUS_COLOR: Record<PluginVersionStatus, string> = {
-  pending: 'warning',
-  approved: 'success',
-  rejected: 'error',
-}
+const syncing = ref(false)
+const syncResult = ref<{ total: number; updatedAt: number } | null>(null)
 
 function formatDate(timestamp?: number) {
   if (!timestamp) return ''
   return new Date(timestamp).toLocaleString('zh-CN')
-}
-
-function formatSize(bytes: number) {
-  if (bytes < 1024) return `${bytes} B`
-  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`
-  return `${(bytes / 1024 / 1024).toFixed(1)} MB`
-}
-
-// 公开展示的插件信息要等版本通过审核才换，所以审核时要看得到它会改成什么
-function describeChanges(item: ConsoleReviewItem) {
-  return item.submitted.changes
-    .map((field) => {
-      if (field === 'displayName') return `名称为「${item.submitted.displayName}」`
-      if (field === 'category') return `分类为「${item.submitted.category || '无'}」`
-      return '简介'
-    })
-    .join('、')
 }
 
 // SSR 时 $fetch 不会自动带上浏览器 Cookie，控制台的接口靠会话鉴权，必须显式转发
@@ -62,7 +30,7 @@ function sessionHeaders() {
 
 async function load(key: TabKey) {
   const sequence = ++loadSequence
-  if (key === 'settings') {
+  if (key === 'settings' || key === 'index') {
     loading.value = false
     loadFailed.value = false
     return
@@ -70,22 +38,10 @@ async function load(key: TabKey) {
   loading.value = true
   loadFailed.value = false
   try {
-    if (key === 'review') {
-      const data = await $fetch<{ items: ConsoleReviewItem[] }>('/api/console/review', {
-        headers: sessionHeaders(),
-      })
-      reviewItems.value = data.items
-    } else if (key === 'plugins') {
-      const data = await $fetch<{ items: ConsolePluginItem[] }>('/api/console/plugins', {
-        headers: sessionHeaders(),
-      })
-      pluginItems.value = data.items
-    } else {
-      const data = await $fetch<{ items: ConsoleUserItem[] }>('/api/console/users', {
-        headers: sessionHeaders(),
-      })
-      userItems.value = data.items
-    }
+    const data = await $fetch<{ items: ConsoleUserItem[] }>('/api/console/users', {
+      headers: sessionHeaders(),
+    })
+    if (sequence === loadSequence) userItems.value = data.items
   } catch (error) {
     if (sequence !== loadSequence) return
     loadFailed.value = true
@@ -94,8 +50,6 @@ async function load(key: TabKey) {
     if (sequence === loadSequence) loading.value = false
   }
 }
-
-const acting = ref('')
 
 async function run(id: string, successMessage: string, task: () => Promise<unknown>) {
   if (acting.value) return
@@ -111,87 +65,25 @@ async function run(id: string, successMessage: string, task: () => Promise<unkno
   }
 }
 
-function approve(item: ConsoleReviewItem) {
-  return run(item.versionId, '插件版本已通过审核', () =>
-    $fetch(`/api/console/review/${item.versionId}`, {
+async function syncIndex() {
+  if (syncing.value) return
+  syncing.value = true
+  try {
+    syncResult.value = await $fetch<{ total: number; updatedAt: number }>('/api/console/npm/sync', {
       method: 'POST',
       headers: sessionHeaders(),
-      body: { action: 'approve' },
     })
-  )
-}
-
-// 驳回要填理由：作者会在面板的提交记录里看到
-const rejectTarget = ref<ConsoleReviewItem | null>(null)
-const rejectNote = ref('')
-
-// 弹窗的开关直接由「有没有目标」驱动，省掉一个永远要和目标同步的布尔量
-const rejectShown = computed({
-  get: () => rejectTarget.value !== null,
-  set: (value: boolean) => {
-    if (!value) rejectTarget.value = null
-  },
-})
-
-function openReject(item: ConsoleReviewItem) {
-  rejectTarget.value = item
-  rejectNote.value = ''
-}
-
-function confirmReject() {
-  const item = rejectTarget.value
-  if (!item) return
-  const note = rejectNote.value.trim()
-  if (!note) {
-    toast.error('请填写驳回理由')
-    return
+    toast.success(`索引已更新，共 ${syncResult.value.total} 个插件`)
+  } catch (error) {
+    toast.error(apiErrorMessage(error))
+  } finally {
+    syncing.value = false
   }
-  rejectTarget.value = null
-  return run(item.versionId, '插件版本已驳回', () =>
-    $fetch(`/api/console/review/${item.versionId}`, {
-      method: 'POST',
-      headers: sessionHeaders(),
-      body: { action: 'reject', note },
-    })
-  )
-}
-
-function toggleVisibility(item: ConsolePluginItem) {
-  return run(item.id, item.visibility === 'listed' ? '插件已下架' : '插件已上架', () =>
-    $fetch(`/api/console/plugins/${item.id}`, {
-      method: 'PATCH',
-      headers: sessionHeaders(),
-      body: { visibility: item.visibility === 'listed' ? 'hidden' : 'listed' },
-    })
-  )
-}
-
-const deleteTarget = ref<{ kind: 'plugin' | 'user'; id: string; label: string } | null>(null)
-
-const deleteShown = computed({
-  get: () => deleteTarget.value !== null,
-  set: (value: boolean) => {
-    if (!value) deleteTarget.value = null
-  },
-})
-
-function openDelete(kind: 'plugin' | 'user', id: string, label: string) {
-  deleteTarget.value = { kind, id, label }
-}
-
-function confirmDelete() {
-  const target = deleteTarget.value
-  if (!target) return
-  deleteTarget.value = null
-  const url = target.kind === 'plugin' ? `/api/console/plugins/${target.id}` : `/api/console/users/${target.id}`
-  return run(target.id, target.kind === 'plugin' ? '插件已删除' : '用户已删除', () =>
-    $fetch(url, { method: 'DELETE', headers: sessionHeaders() })
-  )
 }
 
 function toggleAdmin(item: ConsoleUserItem) {
   return run(item.id, item.isAdmin ? '已取消管理员权限' : '已授予管理员权限', () =>
-    $fetch(`/api/console/users/${item.id}`, {
+    $fetch<unknown>(`/api/console/users/${item.id}`, {
       method: 'PATCH',
       headers: sessionHeaders(),
       body: { isAdmin: !item.isAdmin },
@@ -199,8 +91,28 @@ function toggleAdmin(item: ConsoleUserItem) {
   )
 }
 
-await load('review')
-watch(tab, (key) => load(key))
+const deleteTarget = ref<ConsoleUserItem | null>(null)
+const deleteShown = computed({
+  get: () => deleteTarget.value !== null,
+  set: (value: boolean) => {
+    if (!value) deleteTarget.value = null
+  },
+})
+
+function confirmDelete() {
+  const target = deleteTarget.value
+  if (!target) return
+  deleteTarget.value = null
+  return run(target.id, '用户已删除', () =>
+    $fetch<unknown>(`/api/console/users/${target.id}`, {
+      method: 'DELETE',
+      headers: sessionHeaders(),
+    })
+  )
+}
+
+await load('users')
+watch(tab, (key) => load(key || 'users'))
 </script>
 
 <template>
@@ -210,14 +122,11 @@ watch(tab, (key) => load(key))
     </div>
 
     <v-tabs v-model="tab" color="primary" show-arrows>
-      <v-tab value="review">
-        审核队列
-      </v-tab>
-      <v-tab value="plugins">
-        插件管理
-      </v-tab>
       <v-tab value="users">
         用户管理
+      </v-tab>
+      <v-tab value="index">
+        插件索引
       </v-tab>
       <v-tab value="settings">
         站点设置
@@ -228,161 +137,16 @@ watch(tab, (key) => load(key))
 
     <v-card v-if="loadFailed && !loading" class="text-center mt-4 py-8">
       <div class="text-body-2 text-medium-emphasis mb-4">暂时无法加载列表</div>
-      <v-btn variant="text" @click="load(tab)">重试</v-btn>
+      <v-btn variant="text" @click="load(tab || 'users')">重试</v-btn>
     </v-card>
 
     <v-tabs-window v-if="!loadFailed" v-model="tab" class="mt-4">
-      <v-tabs-window-item value="review">
-        <v-card v-if="!reviewItems.length && !loading">
-          <v-card-text class="text-center text-medium-emphasis py-8">
-            审核队列是空的
-          </v-card-text>
-        </v-card>
-
-        <v-table v-else>
-          <thead>
-            <tr>
-              <th>插件</th>
-              <th>版本</th>
-              <th>提交者</th>
-              <th>文件</th>
-              <th>提交时间</th>
-              <th>操作</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr v-for="item in reviewItems" :key="item.versionId">
-              <td>
-                {{ item.plugin.displayName }}
-                <div class="text-caption text-medium-emphasis">
-                  {{ item.plugin.name }}
-                </div>
-                <div v-if="item.submitted.changes.length" class="text-caption text-warning">
-                  通过后更新：{{ describeChanges(item) }}
-                </div>
-                <div
-                  v-if="item.submitted.changes.includes('description') && item.submitted.summary"
-                  class="text-caption text-medium-emphasis"
-                >
-                  新简介：{{ item.submitted.summary }}
-                </div>
-              </td>
-              <td>{{ item.version }}</td>
-              <td>{{ item.author.displayName }}</td>
-              <td>{{ item.fileCount }} 个 / {{ formatSize(item.sizeBytes) }}</td>
-              <td>{{ formatDate(item.submittedAt) }}</td>
-              <td>
-                <v-btn
-                  size="small"
-                  color="success"
-                  variant="tonal"
-                  :loading="acting === item.versionId"
-                  :disabled="Boolean(acting)"
-                  @click="approve(item)"
-                >
-                  通过
-                </v-btn>
-                <v-btn
-                  size="small"
-                  color="error"
-                  variant="text"
-                  class="ml-2"
-                  :disabled="Boolean(acting)"
-                  @click="openReject(item)"
-                >
-                  驳回
-                </v-btn>
-              </td>
-            </tr>
-          </tbody>
-        </v-table>
-      </v-tabs-window-item>
-
-      <v-tabs-window-item value="plugins">
-        <v-table v-if="pluginItems.length">
-          <thead>
-            <tr>
-              <th>插件</th>
-              <th>作者</th>
-              <th>版本</th>
-              <th>状态</th>
-              <th>更新</th>
-              <th>操作</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr v-for="item in pluginItems" :key="item.id">
-              <td>
-                {{ item.displayName }}
-                <div class="text-caption text-medium-emphasis">
-                  {{ item.name }}
-                </div>
-              </td>
-              <td>{{ item.author.displayName }}</td>
-              <td>
-                <v-chip
-                  v-for="version in item.versions.slice(0, 3)"
-                  :key="version.id"
-                  size="x-small"
-                  :color="STATUS_COLOR[version.status]"
-                  variant="tonal"
-                  class="mr-1"
-                >
-                  {{ version.version }} {{ STATUS_LABEL[version.status] }}
-                </v-chip>
-                <span v-if="item.counts.total > 3" class="text-caption">
-                  等 {{ item.counts.total }} 个版本
-                </span>
-              </td>
-              <td>
-                <v-chip
-                  size="small"
-                  :color="item.visibility === 'listed' ? 'success' : 'default'"
-                  variant="tonal"
-                >
-                  {{ item.visibility === 'listed' ? '已上架' : '已下架' }}
-                </v-chip>
-              </td>
-              <td>{{ formatDate(item.updatedAt) }}</td>
-              <td>
-                <v-btn
-                  size="small"
-                  variant="tonal"
-                  :loading="acting === item.id"
-                  :disabled="Boolean(acting)"
-                  @click="toggleVisibility(item)"
-                >
-                  {{ item.visibility === 'listed' ? '下架' : '上架' }}
-                </v-btn>
-                <v-btn
-                  size="small"
-                  color="error"
-                  variant="text"
-                  class="ml-2"
-                  :disabled="Boolean(acting)"
-                  @click="openDelete('plugin', item.id, item.displayName)"
-                >
-                  删除
-                </v-btn>
-              </td>
-            </tr>
-          </tbody>
-        </v-table>
-
-        <v-card v-else-if="!loading">
-          <v-card-text class="text-center text-medium-emphasis py-8">
-            还没有插件
-          </v-card-text>
-        </v-card>
-      </v-tabs-window-item>
-
       <v-tabs-window-item value="users">
         <v-table v-if="userItems.length">
           <thead>
             <tr>
               <th>用户</th>
               <th>邮箱</th>
-              <th>插件数</th>
               <th>注册时间</th>
               <th>管理员</th>
               <th>操作</th>
@@ -399,7 +163,6 @@ watch(tab, (key) => load(key))
                   </v-chip>
                 </div>
               </td>
-              <td>{{ item.pluginCount }}</td>
               <td>{{ formatDate(item.createdAt) }}</td>
               <td>
                 <v-switch
@@ -418,7 +181,7 @@ watch(tab, (key) => load(key))
                   color="error"
                   variant="text"
                   :disabled="item.isAdmin || Boolean(acting)"
-                  @click="openDelete('user', item.id, item.displayName)"
+                  @click="deleteTarget = item"
                 >
                   删除
                 </v-btn>
@@ -433,35 +196,33 @@ watch(tab, (key) => load(key))
           </v-card-text>
         </v-card>
       </v-tabs-window-item>
+
+      <v-tabs-window-item value="index">
+        <v-card>
+          <v-card-text>
+            <div class="text-body-2 text-medium-emphasis mb-4">
+              市场定时从 npm registry 拉取名为 epanel-plugin-* 的包，并缓存其元数据。插件包本身由 npm
+              托管，市场只提供列表与详情。
+            </div>
+            <div v-if="syncResult" class="text-body-2 mb-4">
+              最近一次同步：{{ formatDate(syncResult.updatedAt) }}，共 {{ syncResult.total }} 个插件。
+            </div>
+            <v-btn color="primary" :loading="syncing" @click="syncIndex">
+              立即同步
+            </v-btn>
+          </v-card-text>
+        </v-card>
+      </v-tabs-window-item>
+
       <v-tabs-window-item value="settings">
         <SiteSettingsPanel />
       </v-tabs-window-item>
     </v-tabs-window>
 
-    <v-dialog v-model="rejectShown" max-width="460">
-      <v-card :title="'驳回插件版本'">
-        <v-card-text>
-          <div class="text-body-2 mb-4">
-            驳回 {{ rejectTarget?.plugin.displayName }} v{{ rejectTarget?.version }}，理由会展示给提交者。
-          </div>
-          <v-textarea v-model="rejectNote" label="驳回理由" rows="3" />
-        </v-card-text>
-        <v-card-actions>
-          <v-spacer />
-          <v-btn variant="text" @click="rejectTarget = null">
-            取消
-          </v-btn>
-          <v-btn color="error" :disabled="!rejectNote.trim()" @click="confirmReject">
-            驳回
-          </v-btn>
-        </v-card-actions>
-      </v-card>
-    </v-dialog>
-
     <v-dialog v-model="deleteShown" max-width="420">
-      <v-card :title="deleteTarget?.kind === 'user' ? '删除用户' : '删除插件'">
+      <v-card :title="'删除用户'">
         <v-card-text>
-          确定要删除「{{ deleteTarget?.label }}」吗？此操作不可撤销。
+          确定要删除「{{ deleteTarget?.displayName }}」吗？此操作不可撤销。
         </v-card-text>
         <v-card-actions>
           <v-spacer />

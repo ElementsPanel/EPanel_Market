@@ -1,66 +1,45 @@
-/** 插件可见性：`listed` 上架，`hidden` 被管理员下架。 */
-export type PluginVisibility = 'listed' | 'hidden'
-
-/** 一个版本的审核状态，`pending` 即处于审核队列。 */
-export type PluginVersionStatus = 'pending' | 'approved' | 'rejected'
-
-/**
- * 插件的端：产物包里首段路径就是它（`panel/plugin.json`、`daemon/plugin.json`）。
- * 两端都在就是双端插件。
- */
+/** 插件的端：npm 包的 `elementspanel.panel` / `elementspanel.daemon` 声明它。 */
 export type PluginSide = 'panel' | 'daemon'
 
 /** 固定顺序，前端展示与后端推导都用它，避免顺序随文件系统变化。 */
 export const PLUGIN_SIDES = ['panel', 'daemon'] as const
 
 /**
- * 一端声明的宿主兼容性，即 `<side>/plugin.json` 里的 `elements`：`api` 是宿主插件 API
- * 版本，`sdk` 是浏览器 SDK 版本（只有带前端的一端才有）。
+ * npm 索引里的一个版本。市场不再托管插件包，所以没有审核状态、文件数与文件清单；
+ * 版本号、发布时间与端信息全部来自 npm registry。
  */
-export interface PluginCompatibility {
-  api: number
-  sdk?: number
-}
-
-/** 按端列出的兼容性；没有声明 `elements` 的端（旧包）不出现在这里。 */
-export type PluginCompatibilityMap = Partial<Record<PluginSide, PluginCompatibility>>
-
 export interface PluginVersionSummary {
+  /** `包名@版本号`，作为版本行在前端的唯一键。 */
   id: string
   version: string
-  status: PluginVersionStatus
+  /** 兼容旧市场的字段：npm 包直接视为已通过。 */
+  status: 'approved'
   changelog: string
   fileCount: number
   sizeBytes: number
   submittedAt: number
-  reviewedAt?: number
-  reviewNote?: string
-  /** 该版本的产物里实际存在的端。 */
+  /** 该版本声明的端。 */
   sides: PluginSide[]
-  /** 该版本各端声明的兼容性，面板据此在安装前提示「需要其他版本的宿主」。 */
-  compatibility: PluginCompatibilityMap
 }
 
-/** 列表卡片用的插件摘要。版本取自最新的已通过版本。 */
+/** 列表卡片用的插件摘要。 */
 export interface PluginSummary {
+  /** 插件标识，即 npm 包 `elementspanel.id` 或从包名推导出的 id。 */
   id: string
+  /** npm 包名，面板安装时写入项目依赖的就是它。 */
   name: string
   displayName: string
   summary: string
   category: string
-  visibility: PluginVisibility
   author: {
     id: string
     displayName: string
   }
-  /** 最新已通过版本（按版本号），尚无通过版本时为 undefined。 */
+  /** npm `dist-tags.latest` 指向的版本。 */
   latestVersion?: PluginVersionSummary
-  /** 最新已通过版本的端，供卡片直接展示，不必往下钻。 */
+  /** 最新版本声明的端，供卡片直接展示。 */
   sides: PluginSide[]
-  /**
-   * 最新已通过版本的包里有没有 `icon.png`。与 `sides` 一样从产物目录推导，没有对应
-   * 数据库列；为 true 时 `GET /api/plugins/:id/icon` 才有图。
-   */
+  /** npm 索引不托管图标，页面统一回退到默认图标。 */
   hasIcon: boolean
   createdAt: number
   updatedAt: number
@@ -68,14 +47,14 @@ export interface PluginSummary {
 
 export interface PluginDetail extends PluginSummary {
   description: string
-  /** 版本历史。公开详情仅含已通过版本、按版本号新在前；作者视图包含全部状态、按提交时间新在前。 */
+  /** 版本历史，按版本号从新到旧。 */
   versions: PluginVersionSummary[]
 }
 
-/** 公开详情的选中版本始终已通过审核，默认选择最新版本。 */
+/** 公开详情的选中版本，默认最新版本。 */
 export interface PublishedPluginDetail extends PluginDetail {
   selectedVersion: PluginVersionSummary
-  /** 选中版本包里 `<side>/README.md` 的原文；包里没有自述时是空串。 */
+  /** npm 包的 README 原文。 */
   readme: string
   /** 上者渲染并净化后的 HTML；空自述同样是空串。 */
   readmeHtml: string
@@ -88,41 +67,4 @@ export interface PluginListResult {
   total: number
   page: number
   pageSize: number
-}
-
-/**
- * 从上传包里描述整包的 plugin.json 读出的插件信息：先 panel 端，仅在 daemon-only
- * 插件中回退到 daemon 端。双端插件的 daemon 清单可以只有运行入口。
- */
-export interface PluginUploadManifest {
-  name: string
-  displayName: string
-  version: string
-  description?: string
-  category?: string
-  changelog?: string
-}
-
-export interface PluginUploadResult {
-  pluginId: string
-  versionId: string
-  status: PluginVersionStatus
-}
-
-/** `GET /api/plugins/:id/files` 里的一个文件：面板按 `path` 逐个下载，并用大小与摘要校验。 */
-export interface PluginFileEntry {
-  path: string
-  size: number
-  sha256: string
-}
-
-/** `GET /api/plugins/:id/files`：面板安装前取的文件清单。 */
-export interface PluginFilesResult {
-  pluginId: string
-  name: string
-  displayName: string
-  versionId: string
-  version: string
-  compatibility: PluginCompatibilityMap
-  files: PluginFileEntry[]
 }
