@@ -63,6 +63,7 @@ export type ApiErrorCode =
   | 'PAYLOAD_TOO_LARGE'
   | 'NOT_INITIALIZED'
   | 'ALREADY_INITIALIZED'
+  | 'SYNC_FAILED'
   | 'DB_CONNECTION_FAILED'
 
 export interface ApiErrorData {
