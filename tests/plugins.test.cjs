@@ -65,6 +65,7 @@ function packument(overrides = {}) {
         description: 'Demo plugin',
         elementspanel: {
           id: 'demo',
+          dual: true,
           panel: { directory: 'panel', folder: 'demo' },
           daemon: { directory: 'daemon', folder: 'demo' },
         },
@@ -93,11 +94,12 @@ test('a packument becomes one index row with versions, sides and npm metadata', 
     license: 'MIT',
     changelog: 'Added daemon support',
   })
+  document.versions['1.1.0'].elementspanel.id = 'explicit-id'
   document.versions['1.1.0'].elementspanel.category = 'utilities'
   document.versions['1.1.0'].elementspanel.panel.frontendInject = ['console', 'i18n']
   document.versions['1.1.0'].elementspanel.panel.styles = ['frontend/assets/style.css']
   const record = service.packageRecordFromPackument('epanel-plugin-demo', document, 123)
-  assert.equal(record.id, 'demo')
+  assert.equal(record.id, 'explicit-id')
   assert.equal(record.name, 'epanel-plugin-demo')
   assert.equal(record.displayName, 'Demo Display Name')
   assert.equal(record.summary, 'Description from package.json')
