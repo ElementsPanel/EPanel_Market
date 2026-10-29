@@ -185,6 +185,7 @@ npm run pub -- example
 生成的样式路径写入 `package.json.elementspanel.panel.styles`。单端插件使用 `--panel` 或
 `--daemon`，默认是 panel 端。
 
-运行包通过 npm dependencies 安装内置插件，第三方插件由面板的插件市场安装为项目依赖。
-项目插件默认停用，用户启用状态和配置保存在各运行目录的 `data/plugin-overrides.json`。
+运行包通过 npm dependencies 安装内置插件。面板的插件市场和插件管理都通过 npm 安装、更新和卸载插件依赖，插件管理也支持直接输入 npm 包名及版本号或 tag，并选择面板或守护节点。
+页面中新装插件会自动启用，更新保留原有开关；外部 `npm install` 新增的插件依赖也会被自动发现。已有显式映射的工作区插件沿用原有默认状态，构建完成后在插件管理中启用。
+非核心插件的后端与浏览器资源随依赖变化动态更新；核心服务更新后仍需重启。卸载保留用户配置，用户启用状态和配置保存在各运行目录的 `data/plugin-overrides.json`。
 发布者在 npm 管理包版本及权限，更新元数据后须发布新版本，等待市场下次同步。
