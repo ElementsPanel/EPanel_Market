@@ -117,6 +117,11 @@ function repositoryOf(value: unknown): string {
   return ''
 }
 
+function packageText(document: Record<string, any>, fallback: Record<string, any>, field: string): string {
+  const value = typeof document[field] === 'string' ? document[field] : fallback[field]
+  return typeof value === 'string' ? value : ''
+}
+
 function publishedAt(time: Record<string, any>, version: string): number {
   const value = time[version]
   if (typeof value !== 'string') return 0
@@ -178,7 +183,7 @@ export function packageRecordFromPackument(
       id: `${name}@${version}`,
       version,
       status: 'approved',
-      changelog: '',
+      changelog: packageText(document, isObject(document.elementspanel) ? document.elementspanel : {}, 'changelog'),
       fileCount: Number.isFinite(Number(dist.fileCount)) ? Number(dist.fileCount) : 0,
       sizeBytes: Number.isFinite(Number(dist.unpackedSize)) ? Number(dist.unpackedSize) : 0,
       submittedAt: publishedAt(time, version),
@@ -186,15 +191,11 @@ export function packageRecordFromPackument(
     }
   })
   const selected = versions.find(item => item.version === latestVersion) ?? versions[0]!
-  const description =
-    (typeof latest.description === 'string' && latest.description) ||
-    (typeof packument.description === 'string' && packument.description) ||
-    ''
+  // npm version documents contain the published package.json. Runtime entry
+  // manifests are never a source of market metadata.
+  const description = packageText(latest, packument, 'description')
   const keywords = keywordsOf(packument, latest)
-  const displayName =
-    (typeof latest.displayName === 'string' && latest.displayName.trim()) ||
-    (typeof packument.displayName === 'string' && packument.displayName.trim()) ||
-    id
+  const displayName = packageText(latest, packument, 'displayName').trim() || id
   const created = publishedAt(time, 'created')
   const modified = publishedAt(time, 'modified')
 
@@ -208,8 +209,8 @@ export function packageRecordFromPackument(
     keywords: JSON.stringify(keywords),
     authorName: authorOf(packument, latest),
     repository: repositoryOf(latest.repository) || repositoryOf(packument.repository),
-    homepage: typeof packument.homepage === 'string' ? packument.homepage : '',
-    license: typeof packument.license === 'string' ? packument.license : '',
+    homepage: packageText(latest, packument, 'homepage'),
+    license: packageText(latest, packument, 'license'),
     latestVersion: selected.version,
     versions: JSON.stringify(versions),
     readme: typeof packument.readme === 'string' ? packument.readme.slice(0, 512 * 1024) : '',

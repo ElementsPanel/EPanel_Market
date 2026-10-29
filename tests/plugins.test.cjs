@@ -84,14 +84,28 @@ test('plugin ids are derived from scoped and unscoped package names', () => {
 })
 
 test('a packument becomes one index row with versions, sides and npm metadata', () => {
-  const record = service.packageRecordFromPackument('epanel-plugin-demo', packument(), 123)
+  const document = packument()
+  Object.assign(document.versions['1.1.0'], {
+    displayName: 'Demo Display Name',
+    description: 'Description from package.json',
+    author: 'Package Author <package@example.com>',
+    homepage: 'https://example.com/package',
+    license: 'MIT',
+    changelog: 'Added daemon support',
+  })
+  document.versions['1.1.0'].elementspanel.category = 'utilities'
+  document.versions['1.1.0'].elementspanel.panel.frontendInject = ['console', 'i18n']
+  document.versions['1.1.0'].elementspanel.panel.styles = ['frontend/assets/style.css']
+  const record = service.packageRecordFromPackument('epanel-plugin-demo', document, 123)
   assert.equal(record.id, 'demo')
   assert.equal(record.name, 'epanel-plugin-demo')
-  assert.equal(record.displayName, 'demo')
-  assert.equal(record.summary, 'Demo plugin')
-  assert.equal(record.description, 'Demo plugin')
-  assert.equal(record.category, 'tools')
-  assert.equal(record.authorName, 'Example Author')
+  assert.equal(record.displayName, 'Demo Display Name')
+  assert.equal(record.summary, 'Description from package.json')
+  assert.equal(record.description, 'Description from package.json')
+  assert.equal(record.category, 'utilities')
+  assert.equal(record.authorName, 'Package Author')
+  assert.equal(record.homepage, 'https://example.com/package')
+  assert.equal(record.license, 'MIT')
   assert.equal(record.repository, 'https://github.com/example/demo')
   assert.equal(record.latestVersion, '1.1.0')
   assert.deepEqual(JSON.parse(record.sides), ['panel', 'daemon'])
@@ -108,6 +122,8 @@ test('a packument becomes one index row with versions, sides and npm metadata', 
   assert.equal(versions[0].sizeBytes, 2000)
   assert.equal(versions[0].fileCount, 8)
   assert.equal(versions[0].status, 'approved')
+  assert.equal(versions[0].changelog, 'Added daemon support')
+  assert.equal(versions[1].changelog, '')
 })
 
 test('dist-tags choose the latest release while pre-releases sort below releases', () => {
