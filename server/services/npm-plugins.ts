@@ -100,6 +100,45 @@ function sidesOf(value: unknown): PluginSide[] {
   return PLUGIN_SIDES.filter(side => isObject(elements[side]))
 }
 
+function stringMap(value: unknown): Record<string, string> {
+  return isObject(value)
+    ? Object.fromEntries(
+        Object.entries(value).filter((entry): entry is [string, string] => typeof entry[1] === 'string'),
+      )
+    : {}
+}
+
+/** Keep requirements on their own release; never borrow them from latest. */
+function versionRequirements(document: Record<string, any>) {
+  const elements = isObject(document.elementspanel) ? document.elementspanel : {}
+  const compatibility: PluginVersionSummary['compatibility'] = {}
+  for (const side of PLUGIN_SIDES) {
+    const contract = isObject(elements[side]) ? elements[side].elements : undefined
+    if (isObject(contract) && typeof contract.api === 'number') {
+      compatibility[side] = {
+        api: contract.api,
+        ...(typeof contract.sdk === 'number' ? { sdk: contract.sdk } : {}),
+      }
+    }
+  }
+  const peers = isObject(document.peerDependenciesMeta) ? document.peerDependenciesMeta : {}
+  return {
+    dependencies: stringMap(document.dependencies),
+    peerDependencies: stringMap(document.peerDependencies),
+    peerDependenciesMeta: Object.fromEntries(
+      Object.entries(peers)
+        .filter(([, value]) => isObject(value))
+        .map(([name, value]) => [name, { optional: value.optional === true }]),
+    ),
+    engines: stringMap(document.engines),
+    deprecated: typeof document.deprecated === 'string' ? document.deprecated : undefined,
+    compatibility,
+    frontendDependencies: Array.isArray(elements.panel?.frontendInject)
+      ? elements.panel.frontendInject.filter((value: unknown): value is string => typeof value === 'string')
+      : [],
+  }
+}
+
 function authorOf(packument: Record<string, any>, latest: Record<string, any>): string {
   for (const value of [latest.author, packument.author]) {
     if (typeof value === 'string' && value.trim()) return value.replace(/\s*<.*$/, '').trim()
@@ -176,11 +215,14 @@ export function packageRecordFromPackument(
   if (!id) return null
 
   const time = isObject(packument.time) ? packument.time : {}
-  const versions: PluginVersionSummary[] = sorted.slice(0, MAX_VERSIONS).map(version => {
+  const includedVersions = sorted.slice(0, MAX_VERSIONS)
+  if (!includedVersions.includes(latestVersion)) includedVersions.push(latestVersion)
+  const versions: PluginVersionSummary[] = includedVersions.map(version => {
     const document = packument.versions[version] as Record<string, any>
     const dist = isObject(document.dist) ? document.dist : {}
     return {
       id: `${name}@${version}`,
+      ...versionRequirements(document),
       version,
       status: 'approved',
       changelog: packageText(document, isObject(document.elementspanel) ? document.elementspanel : {}, 'changelog'),

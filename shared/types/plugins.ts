@@ -9,6 +9,13 @@ export const PLUGIN_SIDES = ['panel', 'daemon'] as const
  * 版本号、发布时间与端信息全部来自 npm registry。
  */
 export interface PluginVersionSummary {
+  dependencies?: Record<string, string>
+  peerDependencies?: Record<string, string>
+  peerDependenciesMeta?: Record<string, { optional?: boolean }>
+  engines?: Record<string, string>
+  deprecated?: string
+  compatibility?: Partial<Record<PluginSide, { api: number; sdk?: number }>>
+  frontendDependencies?: string[]
   /** `包名@版本号`，作为版本行在前端的唯一键。 */
   id: string
   version: string

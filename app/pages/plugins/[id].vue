@@ -19,7 +19,7 @@ if (import.meta.client) {
   }, { immediate: true })
 }
 
-const tab = ref<'readme' | 'versions'>('readme')
+const tab = ref<'readme' | 'versions' | 'dependencies'>('readme')
 
 const sides = computed<PluginSide[]>(() => data.value?.sides ?? [])
 const sideLabel = computed(() => pluginSideLabel(sides.value))
@@ -98,6 +98,7 @@ function formatDate(timestamp?: number) {
       <v-tabs v-model="tab" color="primary" class="detail-tabs">
         <v-tab value="readme">自述</v-tab>
         <v-tab value="versions">版本</v-tab>
+        <v-tab value="dependencies">依赖与兼容性</v-tab>
       </v-tabs>
 
       <v-row>
@@ -115,14 +116,21 @@ function formatDate(timestamp?: number) {
 
             <v-tabs-window-item value="versions">
               <div class="version-list">
-                <div v-for="item in data.versions" :key="item.id" class="version-item">
-                  <div class="version-item-text">
-                    <span class="version-item-name">v{{ item.version }}</span>
-                    <span class="version-item-meta">{{ formatDate(item.submittedAt) }}</span>
-                  </div>
-                  <PluginSideBadges :sides="item.sides?.length ? item.sides : sides" />
-                </div>
+                <details v-for="item in data.versions" :key="item.id">
+                  <summary class="version-item">
+                    <div class="version-item-text">
+                      <span class="version-item-name">v{{ item.version }}</span>
+                      <span class="version-item-meta">{{ formatDate(item.submittedAt) }}</span>
+                    </div>
+                    <PluginSideBadges :sides="item.sides?.length ? item.sides : sides" />
+                    <v-icon icon="mdi-chevron-down" size="18" />
+                  </summary>
+                  <PluginVersionRequirements :version="item" />
+                </details>
               </div>
+            </v-tabs-window-item>
+            <v-tabs-window-item value="dependencies">
+              <PluginVersionRequirements :version="data.selectedVersion" />
             </v-tabs-window-item>
           </v-tabs-window>
         </v-col>
@@ -266,8 +274,9 @@ function formatDate(timestamp?: number) {
   gap: 4px;
 }
 
-/* 每一行只做两件事：说清是哪个版本，给出这个版本的下载入口。 */
+/* 展开一个版本即可查看该版本自己的依赖与兼容性。 */
 .version-item {
+  cursor: pointer;
   display: flex;
   align-items: center;
   justify-content: space-between;

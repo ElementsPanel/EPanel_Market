@@ -169,3 +169,37 @@ test('a package without a usable plugin id is not indexed', () => {
     null
   )
 })
+
+test('requirements stay attached to their release and optional peer metadata is preserved', () => {
+  const document = packument()
+  Object.assign(document.versions['1.1.0'], {
+    dependencies: { marked: '^7.0.0', invalid: 12 },
+    peerDependencies: { '@elementspanel/panel': '^1.0.0' },
+    peerDependenciesMeta: { '@elementspanel/panel': { optional: true } },
+    engines: { node: '>=22' },
+    deprecated: 'Use version 2',
+  })
+  document.versions['1.1.0'].elementspanel.panel.elements = { api: 1, sdk: 1 }
+  document.versions['1.1.0'].elementspanel.panel.frontendInject = ['console', 'config']
+  const versions = JSON.parse(service.packageRecordFromPackument('epanel-plugin-demo', document).versions)
+  assert.deepEqual(versions[0].dependencies, { marked: '^7.0.0' })
+  assert.deepEqual(versions[0].peerDependencies, { '@elementspanel/panel': '^1.0.0' })
+  assert.deepEqual(versions[0].peerDependenciesMeta, { '@elementspanel/panel': { optional: true } })
+  assert.deepEqual(versions[0].engines, { node: '>=22' })
+  assert.deepEqual(versions[0].compatibility, { panel: { api: 1, sdk: 1 } })
+  assert.deepEqual(versions[0].frontendDependencies, ['console', 'config'])
+  assert.equal(versions[0].deprecated, 'Use version 2')
+  assert.deepEqual(versions[1].dependencies, {})
+  assert.deepEqual(versions[1].compatibility, {})
+  assert.equal(versions[1].deprecated, undefined)
+})
+
+test('the latest dist-tag remains selectable even outside the fifty highest releases', () => {
+  const document = packument({ 'dist-tags': { latest: '1.0.0' }, versions: {} })
+  for (let minor = 0; minor < 55; minor++) {
+    document.versions[`1.${minor}.0`] = { version: `1.${minor}.0`, elementspanel: { panel: {} } }
+  }
+  const record = service.packageRecordFromPackument('epanel-plugin-demo', document)
+  assert.equal(record.latestVersion, '1.0.0')
+  assert.ok(JSON.parse(record.versions).some(version => version.version === '1.0.0'))
+})

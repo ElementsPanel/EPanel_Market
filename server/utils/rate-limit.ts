@@ -26,7 +26,7 @@ export function takeRateLimit(key: string, limit: number, seconds: number, now =
 function enforceBucket(event: H3Event, key: string, limit: number, seconds: number): void {
   const retryAfter = takeRateLimit(key, limit, seconds)
   if (!retryAfter) return
-  setResponseHeader(event, 'Retry-After', String(retryAfter))
+  setResponseHeader(event, 'Retry-After', retryAfter)
   throw appError(429, 'RATE_LIMITED', '请求过于频繁，请稍后再试')
 }
 
