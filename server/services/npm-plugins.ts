@@ -1,3 +1,4 @@
+import { setTimeout as delay } from 'node:timers/promises'
 import { eq, type InferSelectModel } from 'drizzle-orm'
 import type { AppTables } from '../db/schema'
 import { getDb } from '../db/client'
@@ -26,6 +27,8 @@ const PLUGIN_ID = /^[a-z][a-z0-9_-]{1,63}$/
 const PACKAGE_NAME = /^(?:@[a-z0-9_.-]+\/)?epanel-plugin-[a-z0-9_.-]+$/
 const SEARCH_SIZE = 250
 const MAX_SEARCH_PAGES = 20
+const REGISTRY_REQUEST_INTERVAL = 500
+const MAX_RATE_LIMIT_RETRIES = 3
 const MAX_VERSIONS = 50
 const MAX_PACKUMENT_BYTES = 20 * 1024 * 1024
 const SYNC_INTERVAL = Math.max(60_000, Number(process.env.EPANEL_MARKET_NPM_SYNC_INTERVAL) || 30 * 60 * 1000)
@@ -263,27 +266,67 @@ export function packageRecordFromPackument(
   }
 }
 
+class RegistryHttpError extends Error {
+  constructor(readonly status: number, statusText: string, url: string) {
+    super(`${status} ${statusText}: ${url}`)
+  }
+}
+
+let nextRegistryRequestAt = 0
+let registryRequestQueue = Promise.resolve()
+
+/** 搜索、包元数据与重试共用请求间隔；429 的冷却时间也作用于已排队的请求。 */
+function waitForRegistrySlot(): Promise<void> {
+  const ready = registryRequestQueue.then(async () => {
+    while (nextRegistryRequestAt > Date.now()) {
+      await delay(nextRegistryRequestAt - Date.now())
+    }
+    nextRegistryRequestAt = Date.now() + REGISTRY_REQUEST_INTERVAL
+  })
+  registryRequestQueue = ready.catch(() => {})
+  return ready
+}
+
+function rateLimitDelay(response: Response, attempt: number): number {
+  const retryAfter = response.headers.get('retry-after')
+  const seconds = retryAfter === null ? NaN : Number(retryAfter)
+  const retryAt = Number.isFinite(seconds) ? Date.now() + seconds * 1000 : Date.parse(retryAfter ?? '')
+  // Retry-After 支持秒数和 HTTP 日期；缺失或无效时按 2、4、8 秒退避。
+  return Math.max(2000 * 2 ** attempt, Number.isFinite(retryAt) ? retryAt - Date.now() : 0)
+}
+
 async function fetchJson(url: string, timeout = 30_000): Promise<Record<string, any>> {
-  const controller = new AbortController()
-  const timer = setTimeout(() => controller.abort(), timeout)
-  try {
-    const response = await fetch(url, {
-      headers: { accept: 'application/json' },
-      signal: controller.signal,
-    })
-    if (!response.ok) throw new Error(`${response.status} ${response.statusText}: ${url}`)
-    const text = await response.text()
-    if (text.length > MAX_PACKUMENT_BYTES) throw new Error(`Response too large: ${url}`)
-    return JSON.parse(text) as Record<string, any>
-  } finally {
-    clearTimeout(timer)
+  for (let attempt = 0; ; attempt += 1) {
+    await waitForRegistrySlot()
+    const controller = new AbortController()
+    const timer = setTimeout(() => controller.abort(), timeout)
+    try {
+      const response = await fetch(url, {
+        headers: { accept: 'application/json' },
+        signal: controller.signal,
+      })
+      if (!response.ok) {
+        if (response.status === 429) {
+          nextRegistryRequestAt = Math.max(nextRegistryRequestAt, Date.now() + rateLimitDelay(response, attempt))
+        }
+        await response.body?.cancel()
+        if (response.status === 429 && attempt < MAX_RATE_LIMIT_RETRIES) continue
+        throw new RegistryHttpError(response.status, response.statusText, url)
+      }
+      const text = await response.text()
+      if (text.length > MAX_PACKUMENT_BYTES) throw new Error(`Response too large: ${url}`)
+      return JSON.parse(text) as Record<string, any>
+    } finally {
+      clearTimeout(timer)
+    }
   }
 }
 
 /** registry 搜索能同时覆盖 scope 包与无 scope 包。 */
 async function discoverPackageNames(): Promise<string[]> {
   const names = new Set<string>()
-  for (const text of ['epanel-plugin', '@elementspanel']) {
+  // npm 会把 epanel-plugin 拆词，plugin 会匹配大量无关包；先搜 epanel，再严格过滤包名。
+  for (const text of ['epanel', '@elementspanel']) {
     for (let page = 0; page < MAX_SEARCH_PAGES; page += 1) {
       const from = page * SEARCH_SIZE
       const data = await fetchJson(
@@ -323,19 +366,23 @@ export function syncNpmIndex(): Promise<NpmSyncResult> {
 async function syncNpmIndexNow(): Promise<NpmSyncResult> {
   const names = await discoverPackageNames()
   const records = new Map<string, NpmPluginRow>()
+  const failedNames = new Set<string>()
   for (let index = 0; index < names.length; index += 4) {
     const batch = names.slice(index, index + 4)
-    const results = await Promise.all(
-      batch.map(async name => {
-        try {
-          return packageRecordFromPackument(name, await fetchJson(packageUrl(name)))
-        } catch (error) {
-          console.warn(`[npm-index] failed to read ${name}:`, (error as Error).message)
-          return null
-        }
-      })
+    const results = await Promise.allSettled(
+      batch.map(async name => packageRecordFromPackument(name, await fetchJson(packageUrl(name))))
     )
-    for (const record of results) {
+    for (let item = 0; item < results.length; item += 1) {
+      const result = results[item]!
+      if (result.status === 'rejected') {
+        // 限流重试耗尽时整轮失败，保留已有索引，避免把未能读取的包当成下架。
+        if (result.reason instanceof RegistryHttpError && result.reason.status === 429) throw result.reason
+        const name = batch[item]!
+        failedNames.add(name)
+        console.warn(`[npm-index] failed to read ${name}:`, result.reason?.message ?? result.reason)
+        continue
+      }
+      const record = result.value
       if (!record) continue
       const current = records.get(record.id)
       records.set(record.id, current ? preferPackage(current, record) : record)
@@ -360,10 +407,10 @@ async function syncNpmIndexNow(): Promise<NpmSyncResult> {
       await db.insert(tables.npmPlugins).values(record)
     }
   }
-  // 只有本轮确实成功读到包时才清理下架项，避免一次网络故障清空整个索引。
+  // 只有本轮确实成功读到包时才清理下架项；读取失败的包保留上一次的索引。
   if (records.size) {
     for (const row of existing) {
-      if (!records.has(row.id))
+      if (!records.has(row.id) && !failedNames.has(row.name))
         await db.delete(tables.npmPlugins).where(eq(tables.npmPlugins.id, row.id))
     }
   }
