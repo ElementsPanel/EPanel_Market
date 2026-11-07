@@ -609,7 +609,10 @@ function toSummary(row: NpmPluginRow, hasIcon: boolean): PluginSummary {
     author: { id: row.name, displayName: row.authorName || 'npm' },
     latestVersion,
     sides: parseSides(row),
-    hasIcon,
+    // 面板把 hasIcon 为 true 理解成「能从自己的 /plugin/icon 取到图」，而该路由目前恒返回空，
+    // 置 true 会让面板显示空白头像；所以固定为 false，让它回退默认图标，图标地址单独放在 iconUrl。
+    hasIcon: false,
+    iconUrl: hasIcon ? `/api/plugins/${encodeURIComponent(row.id)}/icon` : null,
     createdAt: row.publishedAt,
     updatedAt: row.updatedAt,
   }

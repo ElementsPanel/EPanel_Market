@@ -46,8 +46,10 @@ export interface PluginSummary {
   latestVersion?: PluginVersionSummary
   /** 最新版本声明的端，供卡片直接展示。 */
   sides: PluginSide[]
-  /** npm 包根目录有 icon.png 且已缓存时为 true，图标地址是 `/api/plugins/:id/icon`；否则页面回退到默认图标。 */
+  /** 兼容 ElementsPanel 的字段：恒为 false，使其显示默认图标。 */
   hasIcon: boolean
+  /** npm 包根目录 icon.png 的站内地址；没有图标时为 null。 */
+  iconUrl: string | null
   createdAt: number
   updatedAt: number
 }

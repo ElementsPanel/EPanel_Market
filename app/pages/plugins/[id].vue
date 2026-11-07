@@ -63,9 +63,9 @@ function formatDate(timestamp?: number) {
         <div class="detail-heading">
           <v-avatar class="plugin-detail-icon" size="64" rounded="12px" color="surface" variant="flat">
             <v-img
-              v-if="data.hasIcon"
+              v-if="data.iconUrl"
               class="plugin-detail-icon-image"
-              :src="`/api/plugins/${encodeURIComponent(data.id)}/icon`"
+              :src="data.iconUrl"
               alt=""
               cover
             />

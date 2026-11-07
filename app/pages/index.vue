@@ -113,9 +113,9 @@ function formatDate(timestamp?: number) {
               <div class="plugin-market-card-head">
                 <v-avatar class="plugin-market-icon" size="52" rounded="12px" color="surface" variant="flat">
                   <v-img
-                    v-if="plugin.hasIcon"
+                    v-if="plugin.iconUrl"
                     class="plugin-market-icon-image"
-                    :src="`/api/plugins/${encodeURIComponent(plugin.id)}/icon`"
+                    :src="plugin.iconUrl"
                     alt=""
                     cover
                   />
