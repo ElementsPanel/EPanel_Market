@@ -67,6 +67,13 @@ CREATE TABLE IF NOT EXISTS npm_plugins (
   synced_at      INTEGER NOT NULL DEFAULT 0
 );
 CREATE INDEX IF NOT EXISTS idx_npm_plugins_updated ON npm_plugins(updated_at);
+CREATE TABLE IF NOT EXISTS npm_plugin_icons (
+  name         TEXT    PRIMARY KEY,
+  version      TEXT    NOT NULL,
+  content_hash TEXT    NOT NULL DEFAULT '',
+  data         BLOB,
+  updated_at   INTEGER NOT NULL DEFAULT 0
+);
 `
 
 const POSTGRES_DDL = `
@@ -136,6 +143,13 @@ CREATE TABLE IF NOT EXISTS npm_plugins (
   synced_at      BIGINT  NOT NULL DEFAULT 0
 );
 CREATE INDEX IF NOT EXISTS idx_npm_plugins_updated ON npm_plugins(updated_at);
+CREATE TABLE IF NOT EXISTS npm_plugin_icons (
+  name         TEXT    PRIMARY KEY,
+  version      TEXT    NOT NULL,
+  content_hash TEXT    NOT NULL DEFAULT '',
+  data         BYTEA,
+  updated_at   BIGINT  NOT NULL DEFAULT 0
+);
 `
 
 export function ddlFor(driver: DbDriver): string {

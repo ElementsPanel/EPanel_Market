@@ -1,4 +1,4 @@
-import { npmSyncInterval, syncNpmIndex } from '../services/npm-plugins'
+import { npmSyncInterval, syncNpmIndex, syncPluginIcons } from '../services/npm-plugins'
 
 // 定时从 npm registry 拉取 epanel-plugin-* 包并写入本地索引。
 // 市场不再托管插件包，索引只是 registry 元数据的一份缓存。
@@ -17,6 +17,8 @@ export default defineNitroPlugin(() => {
     try {
       const result = await syncNpmIndex()
       console.info(`[npm-index] synced ${result.total} plugins`)
+      // 不等图标下载完：它只影响图标，不该推迟下一轮索引同步。
+      syncPluginIcons().catch((error: any) => console.warn('[npm-index] icon sync failed:', error?.message ?? error))
       schedule(npmSyncInterval())
     } catch (error: any) {
       // 初始化完成前数据库还不存在，稍后重试；其余失败按正常周期等待下一轮。

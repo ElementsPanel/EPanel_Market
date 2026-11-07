@@ -62,7 +62,14 @@ function formatDate(timestamp?: number) {
       <header class="detail-header">
         <div class="detail-heading">
           <v-avatar class="plugin-detail-icon" size="64" rounded="12px" color="surface" variant="flat">
-            <v-icon icon="mdi-puzzle-outline" size="34" />
+            <v-img
+              v-if="data.hasIcon"
+              class="plugin-detail-icon-image"
+              :src="`/api/plugins/${encodeURIComponent(data.id)}/icon`"
+              alt=""
+              cover
+            />
+            <v-icon v-else icon="mdi-puzzle-outline" size="34" />
           </v-avatar>
           <div class="detail-heading-text">
             <h1 class="detail-title">

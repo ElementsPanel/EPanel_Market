@@ -3,6 +3,7 @@ const fs = require('node:fs')
 const path = require('node:path')
 const Module = require('node:module')
 const { test } = require('node:test')
+const zlib = require('node:zlib')
 const ts = require('typescript')
 
 // Exercise npm indexing in memory; no database, registry, build or server is needed.
@@ -395,4 +396,36 @@ test('non-429 search errors fail without retrying or changing the index', async 
   await assert.rejects(fixture.index.syncNpmIndex(), { status: 503 })
   assert.equal(fixture.requests.length, 1)
   assert.equal(fixture.dbReads, 0)
+})
+
+function tarEntry(name, content, { prefix = '', type = '0' } = {}) {
+  const header = Buffer.alloc(512)
+  header.write(name, 0)
+  header.write(content.length.toString(8).padStart(11, '0'), 124)
+  header.write(type, 156)
+  header.write('ustar', 257)
+  header.write(prefix, 345)
+  return Buffer.concat([header, content, Buffer.alloc((512 - (content.length % 512)) % 512)])
+}
+
+function tarball(...entries) {
+  return zlib.gzipSync(Buffer.concat([...entries, Buffer.alloc(1024)]))
+}
+
+const PNG = Buffer.concat([Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]), Buffer.from('image')])
+
+test('the icon comes from icon.png in the package root only', async () => {
+  const icon = await service.extractPackageIcon(tarball(
+    tarEntry('package/package.json', Buffer.from('{}')),
+    tarEntry('package/assets/icon.png', Buffer.from('nested')),
+    tarEntry('package/icon.png', PNG),
+  ))
+  assert.deepEqual(icon, PNG)
+})
+
+test('packages with a missing, non-PNG or unreadable icon have no icon', async () => {
+  assert.equal(await service.extractPackageIcon(tarball(tarEntry('package/index.js', Buffer.from('x')))), null)
+  assert.equal(await service.extractPackageIcon(tarball(tarEntry('package/icon.png', Buffer.from('<svg/>')))), null)
+  assert.equal(await service.extractPackageIcon(tarball(tarEntry('package/icon.png', Buffer.alloc(0), { type: '5' }))), null)
+  assert.equal(await service.extractPackageIcon(Buffer.from('not gzip')), null)
 })

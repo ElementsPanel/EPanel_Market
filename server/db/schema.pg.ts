@@ -83,3 +83,12 @@ export const npmPlugins = pgTable('npm_plugins', {
   index('idx_npm_plugins_updated').on(table.updatedAt),
 ])
 
+/** npm 包里 icon.png 的缓存。图标为空的行表示该版本已检查过但没有图标，无需再下载。 */
+export const npmPluginIcons = pgTable('npm_plugin_icons', {
+  name: text('name').primaryKey(),
+  version: text('version').notNull(),
+  contentHash: text('content_hash').notNull().default(''),
+  data: bytea('data'),
+  updatedAt: bigint('updated_at', { mode: 'number' }).notNull().default(0),
+})
+

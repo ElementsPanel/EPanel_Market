@@ -112,7 +112,14 @@ function formatDate(timestamp?: number) {
             <v-card-text class="plugin-market-card-content">
               <div class="plugin-market-card-head">
                 <v-avatar class="plugin-market-icon" size="52" rounded="12px" color="surface" variant="flat">
-                  <v-icon icon="mdi-puzzle-outline" size="28" />
+                  <v-img
+                    v-if="plugin.hasIcon"
+                    class="plugin-market-icon-image"
+                    :src="`/api/plugins/${encodeURIComponent(plugin.id)}/icon`"
+                    alt=""
+                    cover
+                  />
+                  <v-icon v-else icon="mdi-puzzle-outline" size="28" />
                 </v-avatar>
                 <div class="plugin-market-card-heading">
                   <div class="text-h6">

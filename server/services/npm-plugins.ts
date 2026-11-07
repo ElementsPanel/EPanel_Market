@@ -1,4 +1,7 @@
+import { createHash } from 'node:crypto'
 import { setTimeout as delay } from 'node:timers/promises'
+import { promisify } from 'node:util'
+import { gunzip } from 'node:zlib'
 import { eq, type InferSelectModel } from 'drizzle-orm'
 import type { AppTables } from '../db/schema'
 import { getDb } from '../db/client'
@@ -31,6 +34,12 @@ const REGISTRY_REQUEST_INTERVAL = 500
 const MAX_RATE_LIMIT_RETRIES = 3
 const MAX_VERSIONS = 50
 const MAX_PACKUMENT_BYTES = 20 * 1024 * 1024
+const MAX_TARBALL_BYTES = 32 * 1024 * 1024
+const MAX_UNPACKED_BYTES = 128 * 1024 * 1024
+const MAX_ICON_BYTES = 2 * 1024 * 1024
+const PNG_SIGNATURE = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a])
+const ICON_PATH = /^(?:\.\/)?[^/]+\/icon\.png$/
+const gunzipAsync = promisify(gunzip)
 const SYNC_INTERVAL = Math.max(60_000, Number(process.env.EPANEL_MARKET_NPM_SYNC_INTERVAL) || 30 * 60 * 1000)
 
 export const PAGE_SIZE = 12
@@ -295,14 +304,19 @@ function rateLimitDelay(response: Response, attempt: number): number {
   return Math.max(2000 * 2 ** attempt, Number.isFinite(retryAt) ? retryAt - Date.now() : 0)
 }
 
-async function fetchJson(url: string, timeout = 30_000): Promise<Record<string, any>> {
+async function fetchRegistry<T>(
+  url: string,
+  accept: string,
+  timeout: number,
+  read: (response: Response) => Promise<T>,
+): Promise<T> {
   for (let attempt = 0; ; attempt += 1) {
     await waitForRegistrySlot()
     const controller = new AbortController()
     const timer = setTimeout(() => controller.abort(), timeout)
     try {
       const response = await fetch(url, {
-        headers: { accept: 'application/json' },
+        headers: { accept },
         signal: controller.signal,
       })
       if (!response.ok) {
@@ -313,13 +327,19 @@ async function fetchJson(url: string, timeout = 30_000): Promise<Record<string, 
         if (response.status === 429 && attempt < MAX_RATE_LIMIT_RETRIES) continue
         throw new RegistryHttpError(response.status, response.statusText, url)
       }
-      const text = await response.text()
-      if (text.length > MAX_PACKUMENT_BYTES) throw new Error(`Response too large: ${url}`)
-      return JSON.parse(text) as Record<string, any>
+      return await read(response)
     } finally {
       clearTimeout(timer)
     }
   }
+}
+
+function fetchJson(url: string, timeout = 30_000): Promise<Record<string, any>> {
+  return fetchRegistry(url, 'application/json', timeout, async (response) => {
+    const text = await response.text()
+    if (text.length > MAX_PACKUMENT_BYTES) throw new Error(`Response too large: ${url}`)
+    return JSON.parse(text) as Record<string, any>
+  })
 }
 
 /** registry 搜索能同时覆盖 scope 包与无 scope 包。 */
@@ -418,6 +438,141 @@ async function syncNpmIndexNow(): Promise<NpmSyncResult> {
   return { total: records.size, updatedAt: Date.now() }
 }
 
+function tarString(header: Buffer, start: number, end: number): string {
+  const text = header.toString('utf8', start, end)
+  const terminator = text.indexOf('\0')
+  return terminator < 0 ? text : text.slice(0, terminator)
+}
+
+/**
+ * 从 npm 包的 .tgz 里取根目录的 icon.png；没有图标或内容不是 PNG 时返回 null。
+ * 损坏或超限的包同样按没有图标处理，同一版本不会在每轮同步里反复下载。
+ */
+export async function extractPackageIcon(tarball: Buffer): Promise<Buffer | null> {
+  let tar: Buffer
+  try {
+    tar = await gunzipAsync(tarball, { maxOutputLength: MAX_UNPACKED_BYTES })
+  } catch {
+    return null
+  }
+
+  for (let offset = 0; offset + 512 <= tar.length;) {
+    const header = tar.subarray(offset, offset + 512)
+    if (header[0] === 0) return null
+    const size = Number.parseInt(tarString(header, 124, 136).trim(), 8)
+    if (!Number.isSafeInteger(size) || size < 0) return null
+
+    const name = tarString(header, 0, 100)
+    const prefix = tarString(header, 257, 262) === 'ustar' ? tarString(header, 345, 500) : ''
+    const regularFile = header[156] === 0 || header[156] === 0x30
+    if (regularFile && ICON_PATH.test(prefix ? `${prefix}/${name}` : name)) {
+      const start = offset + 512
+      if (size > MAX_ICON_BYTES || start + size > tar.length) return null
+      const icon = tar.subarray(start, start + size)
+      // 拷贝一份，避免缓存图标时连带留住整个解压缓冲区。
+      return icon.subarray(0, PNG_SIGNATURE.length).equals(PNG_SIGNATURE) ? Buffer.from(icon) : null
+    }
+    offset += 512 + Math.ceil(size / 512) * 512
+  }
+  return null
+}
+
+function tarballUrl(name: string, version: string): string {
+  const base = name.split('/').pop()!
+  return `${registry()}/${name}/-/${base}-${encodeURIComponent(version)}.tgz`
+}
+
+async function fetchPackageIcon(name: string, version: string): Promise<Buffer | null> {
+  const tarball = await fetchRegistry(tarballUrl(name, version), 'application/octet-stream', 120_000, async (response) => {
+    if (Number(response.headers.get('content-length')) > MAX_TARBALL_BYTES) {
+      await response.body?.cancel()
+      return null
+    }
+    const data = Buffer.from(await response.arrayBuffer())
+    return data.length > MAX_TARBALL_BYTES ? null : data
+  })
+  return tarball ? await extractPackageIcon(tarball) : null
+}
+
+let iconsRunning: Promise<void> | null = null
+
+/** 同步图标与索引分开：图标失败不影响索引，保留旧图标并在下一轮重试。 */
+export function syncPluginIcons(): Promise<void> {
+  if (!iconsRunning) iconsRunning = syncPluginIconsNow().finally(() => (iconsRunning = null))
+  return iconsRunning
+}
+
+async function syncPluginIconsNow(): Promise<void> {
+  const { db, tables } = await getDb()
+  const plugins = await db
+    .select({ name: tables.npmPlugins.name, latestVersion: tables.npmPlugins.latestVersion })
+    .from(tables.npmPlugins)
+  const cached = await db
+    .select({ name: tables.npmPluginIcons.name, version: tables.npmPluginIcons.version })
+    .from(tables.npmPluginIcons)
+  const checked = new Map(cached.map(row => [row.name, row.version]))
+  const indexed = new Set(plugins.map(plugin => plugin.name))
+
+  for (const name of checked.keys()) {
+    if (!indexed.has(name)) await db.delete(tables.npmPluginIcons).where(eq(tables.npmPluginIcons.name, name))
+  }
+
+  // 包内容按版本不可变，所以只有最新版本变化后才需要重新下载。
+  for (const { name, latestVersion: version } of plugins) {
+    if (checked.get(name) === version) continue
+    let data: Buffer | null
+    try {
+      data = await fetchPackageIcon(name, version)
+    } catch (error: any) {
+      if (error instanceof RegistryHttpError && error.status === 429) throw error
+      console.warn(`[npm-index] failed to read icon of ${name}@${version}:`, error?.message ?? error)
+      continue
+    }
+    const values = {
+      version,
+      contentHash: data ? createHash('sha256').update(data).digest('hex') : '',
+      data,
+      updatedAt: Date.now(),
+    }
+    await db.insert(tables.npmPluginIcons).values({ name, ...values }).onConflictDoUpdate({
+      target: tables.npmPluginIcons.name,
+      set: values,
+    })
+  }
+}
+
+export interface PluginIcon {
+  data: Buffer
+  contentHash: string
+}
+
+/** 按插件标识读取缓存的图标；显式挑列，避免查询时把别的二进制也拖出来。 */
+export async function findPluginIcon(id: string): Promise<PluginIcon | null> {
+  const { db, tables } = await getDb()
+  const plugins = await db
+    .select({ name: tables.npmPlugins.name })
+    .from(tables.npmPlugins)
+    .where(eq(tables.npmPlugins.id, id))
+    .limit(1)
+  if (!plugins[0]) return null
+  const icons = await db
+    .select({ data: tables.npmPluginIcons.data, contentHash: tables.npmPluginIcons.contentHash })
+    .from(tables.npmPluginIcons)
+    .where(eq(tables.npmPluginIcons.name, plugins[0].name))
+    .limit(1)
+  const icon = icons[0]
+  return icon?.data ? { data: Buffer.from(icon.data), contentHash: icon.contentHash } : null
+}
+
+/** 有图标的包名集合；只取文本列，列表接口不碰图标二进制。 */
+async function packagesWithIcon(): Promise<Set<string>> {
+  const { db, tables } = await getDb()
+  const rows = await db
+    .select({ name: tables.npmPluginIcons.name, contentHash: tables.npmPluginIcons.contentHash })
+    .from(tables.npmPluginIcons)
+  return new Set(rows.filter(row => row.contentHash).map(row => row.name))
+}
+
 export function npmSyncInterval(): number {
   return SYNC_INTERVAL
 }
@@ -442,7 +597,7 @@ function parseSides(row: NpmPluginRow): PluginSide[] {
   }
 }
 
-function toSummary(row: NpmPluginRow): PluginSummary {
+function toSummary(row: NpmPluginRow, hasIcon: boolean): PluginSummary {
   const versions = parseVersions(row)
   const latestVersion = versions.find(item => item.version === row.latestVersion) ?? versions[0]
   return {
@@ -454,7 +609,7 @@ function toSummary(row: NpmPluginRow): PluginSummary {
     author: { id: row.name, displayName: row.authorName || 'npm' },
     latestVersion,
     sides: parseSides(row),
-    hasIcon: false,
+    hasIcon,
     createdAt: row.publishedAt,
     updatedAt: row.updatedAt,
   }
@@ -481,8 +636,11 @@ export async function listIndexedPlugins(options: {
     )
   })
 
+  const withIcon = await packagesWithIcon()
   return {
-    items: matched.slice((page - 1) * pageSize, page * pageSize).map(toSummary),
+    items: matched
+      .slice((page - 1) * pageSize, page * pageSize)
+      .map(row => toSummary(row, withIcon.has(row.name))),
     categories: [...new Set(matched.map(row => row.category).filter(Boolean))].sort(),
     total: matched.length,
     page,
@@ -500,7 +658,7 @@ export async function getIndexedPlugin(id: string, version?: string): Promise<Pu
   const selected = version ? versions.find(item => item.version === version) : versions.find(item => item.version === row.latestVersion) ?? versions[0]
   if (!selected) throw appError(404, 'NOT_FOUND', '该版本不存在')
   const detail: PluginDetail = {
-    ...toSummary(row),
+    ...toSummary(row, (await packagesWithIcon()).has(row.name)),
     description: row.description,
     versions,
   }
