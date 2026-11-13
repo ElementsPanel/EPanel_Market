@@ -1,5 +1,3 @@
-import type { SiteSettings } from './settings'
-
 export type DbDriver = 'sqlite' | 'postgres'
 
 export interface SqliteDbConfig {
@@ -23,24 +21,23 @@ export interface AppConfig {
     sqlite: SqliteDbConfig
     postgres: PostgresDbConfig
   }
-  /** 会话 token 哈希使用的 pepper，初始化时随机生成 */
+  /** 后台会话 Cookie 的签名密钥，初始化时随机生成 */
   secret: string
-  site?: SiteSettings
+  /** 控制台后台密码的 scrypt 哈希。早期版本的配置可能没有这一项。 */
+  adminPasswordHash?: string
 }
 
 export interface SetupPayload {
-  settings: SiteSettings
   driver: DbDriver
   sqlite?: Partial<SqliteDbConfig>
   postgres?: Partial<PostgresDbConfig>
-  admin: {
-    email: string
-    password: string
-    displayName?: string
-  }
+  /** 控制台后台密码，初始化后唯一的进入凭据 */
+  password: string
 }
 
 export interface SetupStatus {
   initialized: boolean
   driver?: DbDriver
+  /** 已初始化但还没设过后台密码（旧版本配置升上来时的状态） */
+  needsPassword: boolean
 }

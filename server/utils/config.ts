@@ -49,7 +49,8 @@ export function writeConfigAtomic(config: AppConfig): void {
   initializedFlag = true
 }
 
-export function buildConfig(payload: SetupPayload): AppConfig {
+/** 后台密码由调用方先哈希：这里只负责组装配置，不碰明文。 */
+export function buildConfig(payload: SetupPayload, adminPasswordHash: string): AppConfig {
   const postgres = payload.postgres ?? {}
 
   return {
@@ -70,6 +71,6 @@ export function buildConfig(payload: SetupPayload): AppConfig {
       },
     },
     secret: randomBytes(32).toString('base64'),
-    site: payload.settings,
+    adminPasswordHash,
   }
 }

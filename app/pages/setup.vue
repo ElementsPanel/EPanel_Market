@@ -1,7 +1,6 @@
 <script setup lang="ts">
 import type { DbDriver, SetupPayload } from '../../shared/types/setup'
 import { apiErrorMessage } from '../utils/apiError'
-import { createDefaultSiteSettings } from '../../shared/utils/mail'
 
 definePageMeta({ layout: 'blank' })
 
@@ -15,23 +14,17 @@ const postgres = reactive({
   database: '',
   ssl: false,
 })
-const admin = reactive({
-  email: '',
-  displayName: '',
-  password: '',
-  confirm: '',
-})
+
+const password = ref('')
+const confirm = ref('')
 
 const loading = ref(false)
-const settings = ref({ ...createDefaultSiteSettings(), siteUrl: useRequestURL().origin })
 const toast = useToast()
-
-const { refresh } = useAuth()
 
 onMounted(async () => {
   try {
     const status = await $fetch<{ initialized: boolean }>('/api/setup/status')
-    if (status.initialized) await navigateTo('/')
+    if (status.initialized) await navigateTo('/console')
   } catch (error) {
     toast.error(apiErrorMessage(error))
   }
@@ -40,29 +33,26 @@ onMounted(async () => {
 async function submit() {
   if (loading.value) return
 
-  if (admin.password !== admin.confirm) {
+  if (password.value.length < 8) {
+    toast.error('后台密码至少需要 8 位')
+    return
+  }
+  if (password.value !== confirm.value) {
     toast.error('两次输入的密码不一致')
     return
   }
 
   loading.value = true
   try {
-    const account = {
-      email: admin.email,
-      password: admin.password,
-      displayName: admin.displayName || undefined,
-    }
-
     const body: SetupPayload = driver.value === 'sqlite'
-      ? { driver: 'sqlite', sqlite: { file: sqliteFile.value }, admin: account, settings: settings.value }
-      : { driver: 'postgres', postgres: { ...postgres }, admin: account, settings: settings.value }
+      ? { driver: 'sqlite', sqlite: { file: sqliteFile.value }, password: password.value }
+      : { driver: 'postgres', postgres: { ...postgres }, password: password.value }
 
     await $fetch('/api/setup/initialize', { method: 'POST', body })
-    settings.value.mail.apiKey = ''
-    settings.value.mail.smtpPassword = ''
-    await refresh()
-    toast.success('初始化成功')
-    await navigateTo('/', { replace: true })
+    password.value = ''
+    confirm.value = ''
+    toast.success('初始化完成')
+    await navigateTo('/console', { replace: true })
   } catch (error: unknown) {
     toast.error(apiErrorMessage(error, '初始化失败'))
   } finally {
@@ -80,7 +70,7 @@ async function submit() {
             初始化 EPanel Market
           </v-card-title>
           <v-card-subtitle>
-            首次启动需要配置数据库并创建管理员账户，配置将保存在项目根目录的 <code>data/</code> 下（位于构建产物之外）。
+            首次启动需要配置数据库并设置后台密码，配置将保存在项目根目录的 <code>data/</code> 下（位于构建产物之外）。
           </v-card-subtitle>
 
           <v-card-text>
@@ -133,28 +123,30 @@ async function submit() {
             <v-divider class="my-4" />
 
             <div class="text-subtitle-1 mb-2">
-              管理员账户
+              后台密码
             </div>
-            <v-text-field v-model="admin.email" label="邮箱" type="email" />
-            <v-text-field v-model="admin.displayName" label="显示名称（可选）" />
-            <v-text-field v-model="admin.password" label="密码" type="password" />
-            <v-text-field v-model="admin.confirm" label="确认密码" type="password" />
-
-            <v-divider class="my-4" />
-            <div class="text-subtitle-1 mb-2">站点与邮件</div>
-            <p class="text-body-2 text-medium-emphasis mb-4">新用户注册后需要验证邮箱。初始化创建的管理员账户可以直接登录。</p>
+            <p class="text-body-2 text-medium-emphasis mb-4">
+              控制台不设账号，进入 <code>/console</code> 时输入这枚密码即可。密码以哈希形式保存在配置文件中，忘记后只能手工改配置。
+            </p>
             <v-text-field
-              v-model="settings.siteUrl"
-              label="站点对外地址"
-              placeholder="https://market.example.com"
-              hint="用于邮件中的邮箱验证链接。"
+              v-model="password"
+              label="后台密码"
+              type="password"
+              autocomplete="new-password"
+              hint="8-128 位"
               persistent-hint
-              maxlength="2048"
-              :disabled="loading"
-              class="mb-4"
+              maxlength="128"
               required
             />
-            <MailSettingsForm v-model="settings.mail" :disabled="loading" />
+            <v-text-field
+              v-model="confirm"
+              label="确认后台密码"
+              type="password"
+              autocomplete="new-password"
+              maxlength="128"
+              class="mt-4"
+              required
+            />
           </v-card-text>
 
           <v-card-actions>

@@ -1,8 +1,6 @@
 <script setup lang="ts">
 import { useTheme } from 'vuetify'
 
-const { user, avatarUrl, loggingOut, logout } = useAuth()
-const { view: authView, open: openAuth } = useAuthDialog()
 const route = useRoute()
 const consoleActive = computed(() => route.path === '/console' || route.path.startsWith('/console/'))
 const theme = useTheme()
@@ -30,59 +28,14 @@ const logoSrc = computed(() => theme.global.current.value.dark ? '/images/epanel
     <v-spacer />
 
     <template #append>
-      <template v-if="user?.isAdmin">
-        <v-btn
-          variant="text"
-          to="/console"
-          :active="consoleActive"
-          :prepend-icon="consoleActive ? 'mdi-view-dashboard' : 'mdi-view-dashboard-outline'"
-        >
-          控制台
-        </v-btn>
-      </template>
-
-      <template v-if="user">
-        <v-menu location="bottom end">
-          <template #activator="{ props }">
-            <v-btn v-bind="props" variant="text" :aria-label="`${user.displayName} 的账号菜单`">
-              <UserAvatar :src="avatarUrl" :name="user.displayName" :size="28" />
-            </v-btn>
-          </template>
-          <v-list min-width="220">
-            <v-list-item :title="user.displayName" :subtitle="user.email" />
-            <v-divider />
-            <v-list-item
-              v-if="user.isAdmin"
-              title="控制台"
-              prepend-icon="mdi-view-dashboard-outline"
-              to="/console"
-            />
-            <v-list-item title="编辑资料" prepend-icon="mdi-account-edit" to="/account" />
-            <v-list-item title="退出登录" prepend-icon="mdi-logout" :disabled="loggingOut" @click="logout()" />
-          </v-list>
-        </v-menu>
-      </template>
-
-      <template v-else>
-        <v-btn
-          variant="text"
-          :active="authView === 'login'"
-          :prepend-icon="authView === 'login' ? 'mdi-account-arrow-right' : 'mdi-account-arrow-right-outline'"
-          aria-haspopup="dialog"
-          @click="openAuth('login')"
-        >
-          登录
-        </v-btn>
-        <v-btn
-          variant="text"
-          :active="authView === 'register'"
-          :prepend-icon="authView === 'register' ? 'mdi-account-plus' : 'mdi-account-plus-outline'"
-          aria-haspopup="dialog"
-          @click="openAuth('register')"
-        >
-          注册
-        </v-btn>
-      </template>
+      <v-btn
+        variant="text"
+        to="/console"
+        :active="consoleActive"
+        :prepend-icon="consoleActive ? 'mdi-view-dashboard' : 'mdi-view-dashboard-outline'"
+      >
+        控制台
+      </v-btn>
     </template>
   </v-app-bar>
 </template>

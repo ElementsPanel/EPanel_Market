@@ -1,10 +1,9 @@
 import type { SetupPayload } from '../../../shared/types/setup'
 import { initializeApp } from '../../db/init'
+import { setAdminCookie } from '../../utils/admin'
 import { appError } from '../../utils/errors'
 import { resolveDataFile } from '../../utils/paths'
-import { setSessionCookie } from '../../utils/session'
-import { parseSiteSettings } from '../../utils/settings'
-import { optionalText, requireEmail, requirePassword } from '../../utils/validation'
+import { requirePassword } from '../../utils/validation'
 
 export default defineEventHandler(async (event) => {
   const body = (await readBody<Partial<SetupPayload>>(event)) ?? {}
@@ -16,12 +15,7 @@ export default defineEventHandler(async (event) => {
 
   const payload: SetupPayload = {
     driver,
-    settings: parseSiteSettings(body.settings),
-    admin: {
-      email: requireEmail(body.admin?.email),
-      password: requirePassword(body.admin?.password),
-      displayName: optionalText(body.admin?.displayName),
-    },
+    password: requirePassword(body.password),
   }
 
   if (driver === 'sqlite') {
@@ -46,8 +40,8 @@ export default defineEventHandler(async (event) => {
     }
   }
 
-  const { user, token } = await initializeApp(payload)
-  setSessionCookie(event, token)
+  const { token } = await initializeApp(payload)
+  setAdminCookie(event, token)
 
-  return { ok: true, user }
+  return { ok: true }
 })

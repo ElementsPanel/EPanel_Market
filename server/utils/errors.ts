@@ -1,4 +1,4 @@
-import type { ApiErrorCode } from '../../shared/types/auth'
+import type { ApiErrorCode } from '../../shared/types/api'
 
 /**
  * 统一错误：HTTP 状态行用 ASCII 的 code（避免中文出现在 statusMessage），

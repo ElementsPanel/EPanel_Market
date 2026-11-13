@@ -1,11 +1,11 @@
-import { requireAdminUser } from '../../../utils/api-token'
+import { requireAdmin } from '../../../utils/admin'
 import { appError } from '../../../utils/errors'
 import { syncNpmIndex, syncPluginIcons } from '../../../services/npm-plugins'
 
 // 管理员手动触发一次 npm 索引同步，不必等待定时任务。
 
 export default defineEventHandler(async (event) => {
-  await requireAdminUser(event)
+  requireAdmin(event)
   try {
     const result = await syncNpmIndex()
     // 图标在后台下载，不让管理员的请求等待整批 tarball。

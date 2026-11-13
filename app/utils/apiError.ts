@@ -1,4 +1,4 @@
-import type { ApiErrorCode } from '../../shared/types/auth'
+import type { ApiErrorCode } from '../../shared/types/api'
 
 interface ErrorPayload {
   message?: string

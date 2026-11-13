@@ -1,4 +1,3 @@
-import { createHash } from 'node:crypto'
 import { getRequestIP, setResponseHeader, type H3Event } from 'h3'
 import { appError } from './errors'
 
@@ -32,11 +31,4 @@ function enforceBucket(event: H3Event, key: string, limit: number, seconds: numb
 
 export function enforceRateLimit(event: H3Event, scope: string, limit: number, seconds: number): void {
   enforceBucket(event, `${scope}:${getRequestIP(event) ?? 'unknown'}`, limit, seconds)
-}
-
-export function enforceMailRateLimit(event: H3Event, email: string): void {
-  enforceRateLimit(event, 'verification-mail', 30, 3600)
-  const address = createHash('sha256').update(email.trim().toLowerCase()).digest('hex')
-  enforceBucket(event, `verification-cooldown:${address}`, 1, 60)
-  enforceBucket(event, `verification-address:${address}`, 5, 3600)
 }
