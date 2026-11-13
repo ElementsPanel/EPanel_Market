@@ -4,6 +4,8 @@ import { apiErrorMessage } from '../utils/apiError'
 
 definePageMeta({ layout: 'blank' })
 
+useHead({ title: '初始化' })
+
 const password = ref('')
 const confirm = ref('')
 

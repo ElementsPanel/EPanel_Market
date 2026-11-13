@@ -2,6 +2,8 @@
 import type { PluginListResult } from '../../shared/types/plugins'
 import { apiErrorMessage } from '../utils/apiError'
 
+useHead({ title: '插件市场' })
+
 const route = useRoute()
 const toast = useToast()
 

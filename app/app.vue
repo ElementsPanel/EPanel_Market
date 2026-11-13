@@ -3,6 +3,11 @@ import { useTheme } from 'vuetify'
 
 const theme = useTheme()
 const { mode } = useColorMode()
+
+useHead({
+  titleTemplate: title => (title ? `${title} - ElementsPanel` : 'ElementsPanel'),
+})
+
 const savedScheme = useCookie<string>('epanel-color-scheme', {
   default: () => 'light',
   maxAge: 60 * 60 * 24 * 365,

@@ -1,8 +1,6 @@
 <script setup lang="ts">
 import { useTheme } from 'vuetify'
 
-const route = useRoute()
-const consoleActive = computed(() => route.path === '/console' || route.path.startsWith('/console/'))
 const theme = useTheme()
 const { icon: colorModeIcon, label: colorModeLabel, cycle: cycleColorMode } = useColorMode()
 const logoSrc = computed(() => theme.global.current.value.dark ? '/images/epanel-logo-white.svg' : '/images/epanel-logo.svg')
@@ -14,6 +12,11 @@ const logoSrc = computed(() => theme.global.current.value.dark ? '/images/epanel
       <NuxtLink to="/" class="app-header__home" aria-label="元素面板插件市场首页">
         <img :src="logoSrc" class="app-header__logo" alt="元素面板" width="24" height="24" />
       </NuxtLink>
+    </div>
+
+    <v-spacer />
+
+    <template #append>
       <v-btn
         :icon="colorModeIcon"
         :aria-label="colorModeLabel"
@@ -23,19 +26,6 @@ const logoSrc = computed(() => theme.global.current.value.dark ? '/images/epanel
         rounded="circle"
         @click="cycleColorMode"
       />
-    </div>
-
-    <v-spacer />
-
-    <template #append>
-      <v-btn
-        variant="text"
-        to="/console"
-        :active="consoleActive"
-        :prepend-icon="consoleActive ? 'mdi-view-dashboard' : 'mdi-view-dashboard-outline'"
-      >
-        控制台
-      </v-btn>
     </template>
   </v-app-bar>
 </template>

@@ -10,17 +10,17 @@
     "postinstall": "nuxt prepare"
   },
   "engines": {
-    "node": ">=22.13.0"
+    "node": ">=22.22.3"
   },
   "dependencies": {
     "@mdi/font": "^7.4.47",
     "drizzle-orm": "1.0.0-rc.4",
     "marked": "^7.0.3",
     "nodemailer": "^10.0.9",
-    "nuxt": "^4.5.2",
+    "nuxt": "^4.6.4",
     "pg": "^8.23.0",
     "sanitize-html": "^2.12.1",
-    "vue": "^3.5.42",
+    "vue": "^3.5.45",
     "vue-router": "^5.3.1",
     "vuetify": "^4.2.1",
     "vuetify-nuxt-module": "^1.0.0-rc.6"

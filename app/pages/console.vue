@@ -3,6 +3,8 @@ import { apiErrorCode, apiErrorMessage } from '../utils/apiError'
 
 type TabKey = 'index' | 'password'
 
+useHead({ title: '控制台' })
+
 interface ConsoleSession {
   authenticated: boolean
   hasPassword: boolean

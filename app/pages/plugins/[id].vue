@@ -28,7 +28,7 @@ const npmLink = computed(() =>
 )
 
 useSeoMeta({
-  title: () => (data.value ? `${data.value.displayName} · 插件市场` : '插件详情'),
+  title: () => data.value?.displayName ?? '插件详情',
   description: () => data.value?.summary || '查看插件说明与版本历史',
 })
 
