@@ -3,6 +3,10 @@ body {
   background-color: rgb(var(--v-theme-background));
 }
 
+.v-card {
+  background: rgb(var(--v-theme-background));
+}
+
 .page-enter-active,
 .page-leave-active,
 .layout-enter-active,

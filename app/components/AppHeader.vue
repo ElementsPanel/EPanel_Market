@@ -12,7 +12,7 @@ const logoSrc = computed(() => theme.global.current.value.dark ? '/images/epanel
   <v-app-bar class="app-header" density="comfortable">
     <div class="app-header__brand">
       <NuxtLink to="/" class="app-header__home" aria-label="元素面板插件市场首页">
-        <img :src="logoSrc" class="app-header__logo" alt="元素面板" width="32" height="32" />
+        <img :src="logoSrc" class="app-header__logo" alt="元素面板" width="24" height="24" />
       </NuxtLink>
       <v-btn
         :icon="colorModeIcon"
