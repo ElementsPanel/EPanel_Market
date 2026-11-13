@@ -1,19 +1,8 @@
 <script setup lang="ts">
-import type { DbDriver, SetupPayload } from '../../shared/types/setup'
+import type { SetupPayload } from '../../shared/types/setup'
 import { apiErrorMessage } from '../utils/apiError'
 
 definePageMeta({ layout: 'blank' })
-
-const driver = ref<DbDriver>('sqlite')
-const sqliteFile = ref('data/epanel.sqlite')
-const postgres = reactive({
-  host: '127.0.0.1',
-  port: 5432,
-  user: '',
-  password: '',
-  database: '',
-  ssl: false,
-})
 
 const password = ref('')
 const confirm = ref('')
@@ -44,9 +33,7 @@ async function submit() {
 
   loading.value = true
   try {
-    const body: SetupPayload = driver.value === 'sqlite'
-      ? { driver: 'sqlite', sqlite: { file: sqliteFile.value }, password: password.value }
-      : { driver: 'postgres', postgres: { ...postgres }, password: password.value }
+    const body: SetupPayload = { password: password.value }
 
     await $fetch('/api/setup/initialize', { method: 'POST', body })
     password.value = ''
@@ -70,58 +57,10 @@ async function submit() {
             初始化 EPanel Market
           </v-card-title>
           <v-card-subtitle>
-            首次启动需要配置数据库并设置后台密码，配置将保存在项目根目录的 <code>data/</code> 下（位于构建产物之外）。
+            首次启动只需设置后台密码。数据存放在项目根目录的 <code>data/epanel.sqlite</code>（SQLite，位于构建产物之外）。
           </v-card-subtitle>
 
           <v-card-text>
-            <div class="text-subtitle-1 mb-2">
-              数据库
-            </div>
-            <v-radio-group v-model="driver" inline>
-              <v-radio label="SQLite" value="sqlite" />
-              <v-radio label="PostgreSQL" value="postgres" />
-            </v-radio-group>
-
-            <template v-if="driver === 'sqlite'">
-              <v-text-field
-                v-model="sqliteFile"
-                label="数据库文件路径"
-                hint="相对于项目根目录，例如 data/epanel.sqlite"
-                persistent-hint
-              />
-            </template>
-
-            <template v-else>
-              <v-row density="compact">
-                <v-col cols="12" sm="8">
-                  <v-text-field v-model="postgres.host" label="主机" />
-                </v-col>
-                <v-col cols="12" sm="4">
-                  <v-text-field v-model.number="postgres.port" label="端口" type="number" />
-                </v-col>
-                <v-col cols="12" sm="6">
-                  <v-text-field v-model="postgres.database" label="数据库名" />
-                </v-col>
-                <v-col cols="12" sm="6">
-                  <v-text-field v-model="postgres.user" label="用户名" />
-                </v-col>
-                <v-col cols="12">
-                  <v-text-field
-                    v-model="postgres.password"
-                    label="密码"
-                    type="password"
-                    hint="建议使用仅拥有该库权限的专用账号"
-                    persistent-hint
-                  />
-                </v-col>
-                <v-col cols="12">
-                  <v-switch v-model="postgres.ssl" label="启用 SSL" color="primary" />
-                </v-col>
-              </v-row>
-            </template>
-
-            <v-divider class="my-4" />
-
             <div class="text-subtitle-1 mb-2">
               后台密码
             </div>
@@ -136,6 +75,7 @@ async function submit() {
               hint="8-128 位"
               persistent-hint
               maxlength="128"
+              autofocus
               required
             />
             <v-text-field

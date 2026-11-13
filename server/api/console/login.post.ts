@@ -1,7 +1,7 @@
-import { adminPasswordHash, setAdminCookie } from '../../../utils/admin'
-import { appError } from '../../../utils/errors'
-import { verifyPassword } from '../../../utils/password'
-import { enforceRateLimit } from '../../../utils/rate-limit'
+import { adminPasswordHash, setAdminCookie } from '../../utils/admin'
+import { appError } from '../../utils/errors'
+import { verifyPassword } from '../../utils/password'
+import { enforceRateLimit } from '../../utils/rate-limit'
 
 // 控制台唯一的登录方式：输入后台密码。失败按 IP 限流，防爆破。
 export default defineEventHandler(async (event) => {

@@ -6,7 +6,6 @@ export default defineEventHandler((): SetupStatus => {
   const config = initialized ? readConfig() : null
   return {
     initialized,
-    driver: config?.database.driver,
     // 旧版本的配置里没有后台密码，控制台会先引导设一次
     needsPassword: Boolean(config && !config.adminPasswordHash),
   }

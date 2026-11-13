@@ -1,4 +1,4 @@
-import { clearAdminCookie } from '../../../utils/admin'
+import { clearAdminCookie } from '../../utils/admin'
 
 export default defineEventHandler((event) => {
   clearAdminCookie(event)

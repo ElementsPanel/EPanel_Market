@@ -1,9 +1,9 @@
-import { adminPasswordHash, hasAdminSession, setAdminCookie } from '../../../utils/admin'
-import { readConfig, writeConfigAtomic } from '../../../utils/config'
-import { appError } from '../../../utils/errors'
-import { hashPassword, verifyPassword } from '../../../utils/password'
-import { enforceRateLimit } from '../../../utils/rate-limit'
-import { requirePassword } from '../../../utils/validation'
+import { adminPasswordHash, hasAdminSession, setAdminCookie } from '../../utils/admin'
+import { readConfig, writeConfigAtomic } from '../../utils/config'
+import { appError } from '../../utils/errors'
+import { hashPassword, verifyPassword } from '../../utils/password'
+import { enforceRateLimit } from '../../utils/rate-limit'
+import { requirePassword } from '../../utils/validation'
 
 /**
  * 设置 / 修改后台密码。

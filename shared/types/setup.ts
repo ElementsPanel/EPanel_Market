@@ -28,16 +28,14 @@ export interface AppConfig {
 }
 
 export interface SetupPayload {
-  driver: DbDriver
-  sqlite?: Partial<SqliteDbConfig>
-  postgres?: Partial<PostgresDbConfig>
   /** 控制台后台密码，初始化后唯一的进入凭据 */
   password: string
+  /** 高级用法：手工指定 sqlite 文件路径，默认 data/epanel.sqlite */
+  sqlite?: Partial<SqliteDbConfig>
 }
 
 export interface SetupStatus {
   initialized: boolean
-  driver?: DbDriver
   /** 已初始化但还没设过后台密码（旧版本配置升上来时的状态） */
   needsPassword: boolean
 }

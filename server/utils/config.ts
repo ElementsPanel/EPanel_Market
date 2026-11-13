@@ -4,7 +4,7 @@ import type { AppConfig, SetupPayload } from '../../shared/types/setup'
 import { appError } from './errors'
 import { ensureDataDir, getConfigPath } from './paths'
 
-const DEFAULT_SQLITE_FILE = 'data/epanel.sqlite'
+export const DEFAULT_SQLITE_FILE = 'data/epanel.sqlite'
 
 let cachedConfig: AppConfig | null = null
 let initializedFlag: boolean | null = null
@@ -49,25 +49,24 @@ export function writeConfigAtomic(config: AppConfig): void {
   initializedFlag = true
 }
 
-/** 后台密码由调用方先哈希：这里只负责组装配置，不碰明文。 */
+/** 后台密码由调用方先哈希：这里只负责组装配置，不碰明文。数据库固定 SQLite。 */
 export function buildConfig(payload: SetupPayload, adminPasswordHash: string): AppConfig {
-  const postgres = payload.postgres ?? {}
-
   return {
     version: 1,
     initializedAt: Date.now(),
     database: {
-      driver: payload.driver,
+      driver: 'sqlite',
       sqlite: {
         file: payload.sqlite?.file?.trim() || DEFAULT_SQLITE_FILE,
       },
+      // 初始化不再询问 PostgreSQL；这里留一份中性默认值，只有手工改配置的旧部署才会用到
       postgres: {
-        host: postgres.host?.trim() || '127.0.0.1',
-        port: postgres.port || 5432,
-        user: postgres.user?.trim() || '',
-        password: postgres.password ?? '',
-        database: postgres.database?.trim() || '',
-        ssl: postgres.ssl ?? false,
+        host: '127.0.0.1',
+        port: 5432,
+        user: '',
+        password: '',
+        database: '',
+        ssl: false,
       },
     },
     secret: randomBytes(32).toString('base64'),
