@@ -187,6 +187,7 @@ function formatDate(timestamp?: number) {
   display: flex;
   flex-direction: column;
   padding: 12px 8px;
+  background: rgb(var(--v-theme-surface));
 }
 
 .plugin-market-card-head {

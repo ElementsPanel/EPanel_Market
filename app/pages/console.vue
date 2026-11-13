@@ -49,9 +49,6 @@ const syncing = ref(false)
 const syncResult = ref<{ total: number; updatedAt: number } | null>(null)
 
 const gateTitle = computed(() => hasPassword.value ? '输入后台密码' : '设置后台密码')
-const gateHint = computed(() => hasPassword.value
-  ? '控制台不设账号，输入后台密码即可进入。'
-  : '这处部署还没有后台密码，先设置一枚；之后进入控制台都靠它。')
 
 function formatDate(timestamp?: number) {
   if (!timestamp) return ''
@@ -134,9 +131,6 @@ async function syncIndex() {
           <v-card-title class="text-h5">
             {{ gateTitle }}
           </v-card-title>
-          <v-card-subtitle class="text-body-2">
-            {{ gateHint }}
-          </v-card-subtitle>
           <v-card-text>
             <v-form :disabled="gateLoading" @submit.prevent="submitGate">
               <v-text-field
